@@ -47,16 +47,18 @@ export default function DataProvider({
   const [synced, setSynced] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
-  // One-time cleanup: deduplicate localStorage data on mount
+  // One-time cleanup: deduplicate localStorage sessions on mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem("fg_sessions");
       if (raw) {
-        const sessions = JSON.parse(raw) as { id: string }[];
+        const sessions = JSON.parse(raw) as { id: string; category: string; completed_at: string | null; duration_minutes: number }[];
+        // Deduplicate by content (same category + completed_at + duration) since IDs may differ
         const seen = new Set<string>();
         const deduped = sessions.filter((s) => {
-          if (seen.has(s.id)) return false;
-          seen.add(s.id);
+          const key = `${s.category}|${s.completed_at}|${s.duration_minutes}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
           return true;
         });
         if (deduped.length < sessions.length) {
@@ -83,13 +85,18 @@ export default function DataProvider({
       const hasLocalData = localSessions.length > 0;
 
       if (hasRemoteData) {
-        // Remote has data — merge with localStorage (deduplicate by ID)
+        // Remote has data — merge with localStorage (deduplicate by content)
         if (remote.sessions.length > 0) {
           const localSess = getSessions();
-          const mergedMap = new Map<string, typeof localSess[0]>();
-          for (const s of localSess) mergedMap.set(s.id, s);
-          for (const s of remote.sessions) mergedMap.set(s.id, s);
-          localStorage.setItem("fg_sessions", JSON.stringify([...mergedMap.values()]));
+          const all = [...localSess, ...remote.sessions];
+          const seen = new Set<string>();
+          const deduped = all.filter((s) => {
+            const key = `${s.category}|${s.completed_at}|${s.duration_minutes}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          localStorage.setItem("fg_sessions", JSON.stringify(deduped));
         }
         if (remote.problems.length > 0) {
           const localProbs = getProblems();

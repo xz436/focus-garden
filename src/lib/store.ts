@@ -46,11 +46,12 @@ function setStorage<T>(key: string, data: T) {
 // Sessions
 export function getSessions(): Session[] {
   const sessions = getStorage<Session[]>(STORAGE_KEYS.sessions, []);
-  // Deduplicate by ID (safety net for sync race conditions)
+  // Deduplicate by content (category + completed_at + duration)
   const seen = new Set<string>();
   return sessions.filter((s) => {
-    if (seen.has(s.id)) return false;
-    seen.add(s.id);
+    const key = `${s.category}|${s.completed_at}|${s.duration_minutes}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
