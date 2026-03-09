@@ -279,8 +279,8 @@ function TimerPageInner() {
     const settings = getSettings();
     const todaySessions = getTodaySessions();
     setSessionCount(todaySessions.length);
-    setTimeLeft(settings.timerDurations.coding * 60);
-    setTotalTime(settings.timerDurations.coding * 60);
+    setTimeLeft((settings.timerDurations?.coding || 25) * 60);
+    setTotalTime((settings.timerDurations?.coding || 25) * 60);
     setWeeklyTargets(settings.weeklyTargets);
 
     // Restore active timer if navigating back
@@ -368,7 +368,7 @@ function TimerPageInner() {
   const getTimerDuration = useCallback(
     (cat: string) => {
       const settings = getSettings();
-      return settings.timerDurations[cat];
+      return settings.timerDurations?.[cat] || 25;
     },
     []
   );
