@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CATEGORY_LIST, getPlantEmoji } from "@/lib/constants";
+import { DEFAULT_CATEGORIES, getPlantEmoji } from "@/lib/constants";
+import { useAuth } from "@/components/providers/AuthProvider";
 import Button from "@/components/ui/Button";
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
   const [demoStage, setDemoStage] = useState(0);
@@ -18,12 +20,17 @@ export default function HomePage() {
     setIsOnboarded(!!onboarded);
   }, []);
 
-  // Auto-redirect if already onboarded
+  // Auto-redirect if authenticated
   useEffect(() => {
-    if (isOnboarded === true) {
-      router.push("/dashboard");
+    if (authLoading) return;
+    if (user) {
+      if (isOnboarded === true) {
+        router.push("/dashboard");
+      } else if (isOnboarded === false) {
+        router.push("/onboarding");
+      }
     }
-  }, [isOnboarded, router]);
+  }, [user, authLoading, isOnboarded, router]);
 
   // Animated garden demo
   useEffect(() => {
@@ -33,7 +40,7 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  if (!mounted || isOnboarded === null || isOnboarded === true) {
+  if (!mounted || isOnboarded === null || authLoading || user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-green-50 via-background to-amber-50 dark:from-green-950 dark:via-background dark:to-amber-950">
         <div className="animate-sway text-7xl">🌱</div>
@@ -118,7 +125,7 @@ export default function HomePage() {
             <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-amber-200/50 to-transparent" />
 
             <div className="flex justify-center gap-5 relative z-10">
-              {CATEGORY_LIST.map((cat, idx) => {
+              {DEFAULT_CATEGORIES.map((cat, idx) => {
                 const stage = Math.max(0, (demoStage - idx + 6) % 6);
                 const sessionCount = [0, 0, 1, 4, 9, 16][Math.min(stage, 5)];
                 const size =
@@ -138,7 +145,7 @@ export default function HomePage() {
                       }`}
                       style={{ animationDelay: `${idx * 0.4}s` }}
                     >
-                      {getPlantEmoji(cat.id, sessionCount)}
+                      {getPlantEmoji(cat.emoji, sessionCount)}
                     </span>
                     <span className="text-[9px] text-muted font-medium">{cat.label.split(" ")[0]}</span>
                   </div>
@@ -163,14 +170,14 @@ export default function HomePage() {
 
         {/* CTA */}
         <div className="flex flex-col gap-3 w-full max-w-sm animate-fade-in" style={{ animationDelay: "0.4s" }}>
-          <Link href="/onboarding">
+          <Link href="/login">
             <Button size="lg" className="w-full text-base shadow-lg shadow-green-200 dark:shadow-green-900">
               🌱 Get Started
             </Button>
           </Link>
-          <Link href="/dashboard">
+          <Link href="/login">
             <button className="w-full text-sm text-muted hover:text-foreground transition-colors py-2">
-              I already have data &rarr;
+              I already have an account &rarr;
             </button>
           </Link>
         </div>
@@ -208,7 +215,7 @@ export default function HomePage() {
               Your 6 Life Pillars
             </h3>
             <div className="grid grid-cols-3 gap-3">
-              {CATEGORY_LIST.map((cat) => (
+              {DEFAULT_CATEGORIES.map((cat) => (
                 <div
                   key={cat.id}
                   className="flex flex-col items-center gap-1.5 rounded-2xl bg-white/60 dark:bg-gray-800/60 border border-card-border p-4"
@@ -251,7 +258,7 @@ export default function HomePage() {
 
           {/* Bottom CTA */}
           <div className="mt-12 text-center animate-fade-in" style={{ animationDelay: "0.7s" }}>
-            <Link href="/onboarding">
+            <Link href="/login">
               <Button size="lg" className="w-full max-w-sm text-base">
                 🌱 Start Your Garden
               </Button>

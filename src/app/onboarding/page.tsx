@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CategoryId } from "@/types";
-import { CATEGORY_LIST, getPlantEmoji } from "@/lib/constants";
+import { DEFAULT_CATEGORIES, getPlantEmoji } from "@/lib/constants";
 import { saveSettings, getSettings, AppSettings } from "@/lib/store";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -15,9 +14,9 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("welcome");
   const [name, setName] = useState("");
-  const [targets, setTargets] = useState<Record<CategoryId, number>>({
-    coding: 15, ai: 8, baby: 14, fitness: 5, reading: 5, spiritual: 7,
-  });
+  const [targets, setTargets] = useState<Record<string, number>>(
+    Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c.id, c.weeklyTarget]))
+  );
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [demoStage, setDemoStage] = useState(0);
 
@@ -59,7 +58,7 @@ export default function OnboardingPage() {
           <div key="welcome" className={`text-center space-y-6 ${slideClass}`}>
             {/* Animated garden scene */}
             <div className="relative h-40 flex items-end justify-center gap-4">
-              {CATEGORY_LIST.map((cat, idx) => (
+              {DEFAULT_CATEGORIES.map((cat, idx) => (
                 <div
                   key={cat.id}
                   className="flex flex-col items-center animate-grow"
@@ -147,7 +146,7 @@ export default function OnboardingPage() {
               </p>
             </div>
             <div className="space-y-3">
-              {CATEGORY_LIST.map((cat, idx) => (
+              {DEFAULT_CATEGORIES.map((cat, idx) => (
                 <Card
                   key={cat.id}
                   className="flex items-center gap-4"
@@ -202,7 +201,7 @@ export default function OnboardingPage() {
               </p>
             </div>
             <div className="space-y-3">
-              {CATEGORY_LIST.map((cat, idx) => (
+              {DEFAULT_CATEGORIES.map((cat, idx) => (
                 <div
                   key={cat.id}
                   className="flex items-center gap-3 rounded-xl bg-white dark:bg-gray-800 border border-card-border p-3"
@@ -215,7 +214,7 @@ export default function OnboardingPage() {
                       onClick={() =>
                         setTargets((t) => ({
                           ...t,
-                          [cat.id]: Math.max(0, t[cat.id] - 1),
+                          [cat.id]: Math.max(0, (t[cat.id] || 0) - 1),
                         }))
                       }
                       className="w-8 h-8 rounded-full border border-card-border flex items-center justify-center text-lg hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 transition-all"
@@ -226,13 +225,13 @@ export default function OnboardingPage() {
                       className="w-8 text-center text-lg font-bold transition-all"
                       style={{ color: cat.color }}
                     >
-                      {targets[cat.id]}
+                      {targets[cat.id] || 0}
                     </span>
                     <button
                       onClick={() =>
                         setTargets((t) => ({
                           ...t,
-                          [cat.id]: t[cat.id] + 1,
+                          [cat.id]: (t[cat.id] || 0) + 1,
                         }))
                       }
                       className="w-8 h-8 rounded-full border border-card-border flex items-center justify-center text-lg hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 transition-all"
@@ -274,7 +273,7 @@ export default function OnboardingPage() {
               </span>
 
               <div className="flex justify-center gap-4 pt-4 pb-2">
-                {CATEGORY_LIST.map((cat, idx) => {
+                {DEFAULT_CATEGORIES.map((cat, idx) => {
                   // Plants grow through stages in the demo
                   const stage = Math.max(0, demoStage - idx % 3);
                   const sessionCount = [0, 1, 4, 9, 16][Math.min(stage, 4)];
@@ -294,7 +293,7 @@ export default function OnboardingPage() {
                           sessionCount >= 1 ? "text-2xl" : "text-xl"
                         }`}
                       >
-                        {getPlantEmoji(cat.id, sessionCount)}
+                        {getPlantEmoji(cat.emoji, sessionCount)}
                       </span>
                       <span className="text-[9px] text-muted">{cat.plant}</span>
                     </div>

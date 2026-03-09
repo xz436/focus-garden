@@ -1,7 +1,7 @@
 import { Category, CategoryId, PlantStage, Blind75ProblemSeed } from "@/types";
 
-export const CATEGORIES: Record<CategoryId, Category> = {
-  coding: {
+export const DEFAULT_CATEGORIES: Category[] = [
+  {
     id: "coding",
     label: "Coding Practice",
     emoji: "🌵",
@@ -12,7 +12,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     defaultMinutes: 25,
     weeklyTarget: 15,
   },
-  ai: {
+  {
     id: "ai",
     label: "AI Learning",
     emoji: "🌻",
@@ -23,7 +23,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     defaultMinutes: 25,
     weeklyTarget: 8,
   },
-  baby: {
+  {
     id: "baby",
     label: "Baby Bonding",
     emoji: "🌷",
@@ -34,7 +34,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     defaultMinutes: 30,
     weeklyTarget: 14,
   },
-  fitness: {
+  {
     id: "fitness",
     label: "Fitness",
     emoji: "🌿",
@@ -45,7 +45,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     defaultMinutes: 45,
     weeklyTarget: 5,
   },
-  reading: {
+  {
     id: "reading",
     label: "Reading",
     emoji: "🌹",
@@ -56,7 +56,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     defaultMinutes: 25,
     weeklyTarget: 5,
   },
-  spiritual: {
+  {
     id: "spiritual",
     label: "Spiritual",
     emoji: "🪻",
@@ -67,10 +67,26 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     defaultMinutes: 25,
     weeklyTarget: 7,
   },
-};
+];
 
-export const CATEGORY_LIST = Object.values(CATEGORIES);
-export const CATEGORY_IDS = Object.keys(CATEGORIES) as CategoryId[];
+// Plant/emoji presets for creating new categories
+export const PLANT_PRESETS = [
+  { emoji: "🌵", plant: "Cactus", color: "#22c55e", colorClass: "text-green-500", bgClass: "bg-green-500" },
+  { emoji: "🌻", plant: "Sunflower", color: "#f59e0b", colorClass: "text-amber-500", bgClass: "bg-amber-500" },
+  { emoji: "🌷", plant: "Tulip", color: "#ec4899", colorClass: "text-pink-500", bgClass: "bg-pink-500" },
+  { emoji: "🌿", plant: "Fern", color: "#10b981", colorClass: "text-emerald-500", bgClass: "bg-emerald-500" },
+  { emoji: "🌹", plant: "Rose", color: "#ef4444", colorClass: "text-red-500", bgClass: "bg-red-500" },
+  { emoji: "🪻", plant: "Lavender", color: "#a855f7", colorClass: "text-purple-500", bgClass: "bg-purple-500" },
+  { emoji: "🌸", plant: "Cherry Blossom", color: "#f472b6", colorClass: "text-pink-400", bgClass: "bg-pink-400" },
+  { emoji: "🌴", plant: "Palm", color: "#14b8a6", colorClass: "text-teal-500", bgClass: "bg-teal-500" },
+  { emoji: "🍀", plant: "Clover", color: "#16a34a", colorClass: "text-green-600", bgClass: "bg-green-600" },
+  { emoji: "🌾", plant: "Wheat", color: "#d97706", colorClass: "text-amber-600", bgClass: "bg-amber-600" },
+  { emoji: "🎋", plant: "Bamboo", color: "#65a30d", colorClass: "text-lime-600", bgClass: "bg-lime-600" },
+  { emoji: "🍁", plant: "Maple", color: "#dc2626", colorClass: "text-red-600", bgClass: "bg-red-600" },
+  { emoji: "🌼", plant: "Daisy", color: "#eab308", colorClass: "text-yellow-500", bgClass: "bg-yellow-500" },
+  { emoji: "🌺", plant: "Hibiscus", color: "#e11d48", colorClass: "text-rose-600", bgClass: "bg-rose-600" },
+  { emoji: "🪴", plant: "Potted Plant", color: "#059669", colorClass: "text-emerald-600", bgClass: "bg-emerald-600" },
+];
 
 export const PLANT_STAGES: PlantStage[] = [
   { name: "Seed", minSessions: 0, emoji: "🟤", size: "text-2xl" },
@@ -88,11 +104,11 @@ export function getPlantStage(sessions: number): PlantStage {
   return stage;
 }
 
-export function getPlantEmoji(categoryId: CategoryId, sessions: number): string {
+export function getPlantEmoji(categoryEmoji: string, sessions: number): string {
   const stage = getPlantStage(sessions);
   if (stage.minSessions === 0) return "🟤";
   if (stage.minSessions === 1) return "🌱";
-  return CATEGORIES[categoryId].emoji;
+  return categoryEmoji;
 }
 
 export const BLIND75_CATEGORIES = [

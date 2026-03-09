@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CategoryId, Session } from "@/types";
-import { CATEGORIES, CATEGORY_LIST } from "@/lib/constants";
-import { getSessions } from "@/lib/store";
+import { Category, Session } from "@/types";
+import { getSessions, getCategories } from "@/lib/store";
 import { toLocalDateString } from "@/lib/utils";
 
 interface MonthCalendarProps {
@@ -12,27 +11,29 @@ interface MonthCalendarProps {
 
 export default function MonthCalendar({ className = "" }: MonthCalendarProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
 
   useEffect(() => {
     setSessions(getSessions());
+    setCategories(getCategories());
   }, []);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
 
   const sessionsByDay = useMemo(() => {
-    const map: Record<string, Record<CategoryId, number>> = {};
+    const map: Record<string, Record<string, number>> = {};
     for (const s of sessions) {
       if (!s.completed_at) continue;
       const dateStr = toLocalDateString(new Date(s.completed_at));
       if (!map[dateStr]) {
-        map[dateStr] = { coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0 };
+        map[dateStr] = Object.fromEntries(categories.map(c => [c.id, 0]));
       }
-      map[dateStr][s.category]++;
+      map[dateStr][s.category] = (map[dateStr][s.category] || 0) + 1;
     }
     return map;
-  }, [sessions]);
+  }, [sessions, categories]);
 
   // Calculate calendar grid
   const firstDay = new Date(year, month, 1);
@@ -101,7 +102,7 @@ export default function MonthCalendar({ className = "" }: MonthCalendarProps) {
           const isToday = dateStr === todayStr;
           const isFuture = new Date(dateStr) > today;
           const activeCategories = dayData
-            ? CATEGORY_LIST.filter((c) => dayData[c.id] > 0)
+            ? categories.filter((c) => dayData[c.id] > 0)
             : [];
           const totalSessions = dayData
             ? Object.values(dayData).reduce((a, b) => a + b, 0)
@@ -148,7 +149,7 @@ export default function MonthCalendar({ className = "" }: MonthCalendarProps) {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-2 mt-3 justify-center">
-        {CATEGORY_LIST.map((cat) => (
+        {categories.map((cat) => (
           <div key={cat.id} className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cat.color }} />
             <span className="text-[9px] text-muted">{cat.label.split(" ")[0]}</span>

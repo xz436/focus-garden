@@ -12,7 +12,7 @@ const MAIN_NAV = [
 ];
 
 const MORE_ITEMS = [
-  { href: "/plan", label: "Daily Plan", icon: "📝" },
+  { href: "/weekly-plan", label: "Plan", icon: "📋" },
   { href: "/baby", label: "Baby Activities", icon: "🌷" },
   { href: "/summary", label: "Summary", icon: "📊" },
   { href: "/review", label: "Weekly Review", icon: "📅" },
@@ -25,8 +25,8 @@ export default function BottomNav() {
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
 
-  // Don't show nav on landing page or onboarding
-  if (pathname === "/" || pathname === "/onboarding") return null;
+  // Don't show nav on landing page, onboarding, or login
+  if (pathname === "/" || pathname === "/onboarding" || pathname === "/login") return null;
 
   const isMoreActive = MORE_ITEMS.some(
     (item) => pathname === item.href || pathname.startsWith(item.href)

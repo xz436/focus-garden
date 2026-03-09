@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CategoryId } from "@/types";
-import { CATEGORIES, CATEGORY_LIST, getPlantEmoji } from "@/lib/constants";
-import { addSession, getWeekCategorySessions, getSettings, getTodaySessions, checkAndUnlockAchievements } from "@/lib/store";
-import { formatTime } from "@/lib/utils";
+import { Category } from "@/types";
+import { getPlantEmoji } from "@/lib/constants";
+import { addSession, getWeekCategorySessions, getWeekCategorySessionsForWeek, getSettings, getTodaySessions, checkAndUnlockAchievements, getCategories, getCategoryMap } from "@/lib/store";
+import { formatTime, getWeekStart, toLocalDateString } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { showToast } from "@/components/ui/Toast";
@@ -201,20 +201,19 @@ export default function TimerPage() {
 
 function TimerPageInner() {
   const searchParams = useSearchParams();
-  const [category, setCategory] = useState<CategoryId>("coding");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
+  const [category, setCategory] = useState("coding");
   const [timerState, setTimerState] = useState<TimerState>("idle");
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [totalTime, setTotalTime] = useState(25 * 60);
   const [sessionCount, setSessionCount] = useState(0);
   const [notes, setNotes] = useState("");
   const [showComplete, setShowComplete] = useState(false);
-  const [completedCategory, setCompletedCategory] = useState<CategoryId>("coding");
-  const [weekSessions, setWeekSessions] = useState<Record<CategoryId, number>>({
-    coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0,
-  });
-  const [weeklyTargets, setWeeklyTargets] = useState<Record<CategoryId, number>>({
-    coding: 15, ai: 8, baby: 14, fitness: 5, reading: 5, spiritual: 7,
-  });
+  const [completedCategory, setCompletedCategory] = useState("coding");
+  const [weekSessions, setWeekSessions] = useState<Record<string, number>>({});
+  const [weeklyTargets, setWeeklyTargets] = useState<Record<string, number>>({});
+  const [progressWeekOffset, setProgressWeekOffset] = useState(0);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // Baby bonding manual log
@@ -223,7 +222,7 @@ function TimerPageInner() {
 
   // Manual session log
   const [showManualLog, setShowManualLog] = useState(false);
-  const [manualCategory, setManualCategory] = useState<CategoryId>("coding");
+  const [manualCategory, setManualCategory] = useState("coding");
   const [manualMinutes, setManualMinutes] = useState(25);
   const [manualNotes, setManualNotes] = useState("");
   const [manualTime, setManualTime] = useState(() => {
@@ -247,7 +246,7 @@ function TimerPageInner() {
   const originalTitleRef = useRef<string>("");
 
   // Persist active timer to localStorage so it survives page navigation
-  const saveActiveTimer = useCallback((state: TimerState, cat: CategoryId, total: number, left: number, started: string) => {
+  const saveActiveTimer = useCallback((state: TimerState, cat: string, total: number, left: number, started: string) => {
     if (state === "idle") {
       localStorage.removeItem("fg_active_timer");
     } else {
@@ -265,9 +264,14 @@ function TimerPageInner() {
       "Notification" in window && Notification.permission === "granted"
     );
 
+    const cats = getCategories();
+    const catMap = getCategoryMap();
+    setCategories(cats);
+    setCategoryMap(catMap);
+
     // Set category from URL param (e.g., /timer?category=baby)
-    const paramCat = searchParams.get("category") as CategoryId | null;
-    if (paramCat && CATEGORIES[paramCat]) {
+    const paramCat = searchParams.get("category");
+    if (paramCat && catMap[paramCat]) {
       setCategory(paramCat);
     }
 
@@ -314,13 +318,20 @@ function TimerPageInner() {
   }, []);
 
   useEffect(() => {
-    setWeekSessions(getWeekCategorySessions());
-  }, [showComplete]);
+    if (progressWeekOffset === 0) {
+      setWeekSessions(getWeekCategorySessions());
+    } else {
+      const base = getWeekStart();
+      const d = new Date(base + "T00:00:00");
+      d.setDate(d.getDate() + progressWeekOffset * 7);
+      setWeekSessions(getWeekCategorySessionsForWeek(toLocalDateString(d)));
+    }
+  }, [showComplete, progressWeekOffset]);
 
   // Update tab title with countdown
   useEffect(() => {
     if (timerState === "running" || timerState === "paused" || timerState === "break") {
-      const catEmoji = CATEGORIES[category].emoji;
+      const catEmoji = categoryMap[category]?.emoji || "🌱";
       const state = timerState === "break" ? "Break" : timerState === "paused" ? "⏸" : "";
       document.title = `${formatTime(timeLeft)} ${state} ${catEmoji} Focus Garden`;
     } else {
@@ -352,10 +363,10 @@ function TimerPageInner() {
     return () => clearInterval(interval);
   }, [focusMode, timerState]);
 
-  const selectedCategory = CATEGORIES[category];
+  const selectedCategory = categoryMap[category];
 
   const getTimerDuration = useCallback(
-    (cat: CategoryId) => {
+    (cat: string) => {
       const settings = getSettings();
       return settings.timerDurations[cat];
     },
@@ -379,8 +390,8 @@ function TimerPageInner() {
     playCompletionSound();
     sendNotification(
       "Session Complete! 🌱",
-      `Your ${CATEGORIES[category].plant} is growing! Time for a break.`,
-      CATEGORIES[category].emoji
+      `Your ${categoryMap[category]?.plant || "plant"} is growing! Time for a break.`,
+      categoryMap[category]?.emoji || "🌱"
     );
 
     // Check for new achievements
@@ -568,7 +579,7 @@ function TimerPageInner() {
   const circumference = 2 * Math.PI * 120;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
-  const handleCategoryChange = (newCat: CategoryId) => {
+  const handleCategoryChange = (newCat: string) => {
     setCategory(newCat);
     if (timerState !== "running") {
       setTimerState("idle");
@@ -602,12 +613,12 @@ function TimerPageInner() {
             setFocusMode(!focusMode);
           }
           break;
-        case "Digit1": if (timerState !== "running") handleCategoryChange("coding"); break;
-        case "Digit2": if (timerState !== "running") handleCategoryChange("ai"); break;
-        case "Digit3": if (timerState !== "running") handleCategoryChange("baby"); break;
-        case "Digit4": if (timerState !== "running") handleCategoryChange("fitness"); break;
-        case "Digit5": if (timerState !== "running") handleCategoryChange("reading"); break;
-        case "Digit6": if (timerState !== "running") handleCategoryChange("spiritual"); break;
+        case "Digit1": if (timerState !== "running" && categories[0]) handleCategoryChange(categories[0].id); break;
+        case "Digit2": if (timerState !== "running" && categories[1]) handleCategoryChange(categories[1].id); break;
+        case "Digit3": if (timerState !== "running" && categories[2]) handleCategoryChange(categories[2].id); break;
+        case "Digit4": if (timerState !== "running" && categories[3]) handleCategoryChange(categories[3].id); break;
+        case "Digit5": if (timerState !== "running" && categories[4]) handleCategoryChange(categories[4].id); break;
+        case "Digit6": if (timerState !== "running" && categories[5]) handleCategoryChange(categories[5].id); break;
       }
     };
 
@@ -616,7 +627,7 @@ function TimerPageInner() {
   }, [timerState, focusMode, startTimer, resumeTimer, handleCategoryChange]);
 
   // Focus mode gradient based on category
-  const focusGradients: Record<CategoryId, string> = {
+  const focusGradients: Record<string, string> = {
     coding: "from-emerald-900 via-green-800 to-teal-900",
     ai: "from-amber-900 via-orange-800 to-yellow-900",
     baby: "from-pink-900 via-rose-800 to-fuchsia-900",
@@ -624,12 +635,13 @@ function TimerPageInner() {
     reading: "from-red-900 via-rose-800 to-orange-900",
     spiritual: "from-purple-900 via-violet-800 to-indigo-900",
   };
+  const defaultGradient = "from-slate-900 via-gray-800 to-zinc-900";
 
   // Immersive Focus Mode
   if (focusMode && (timerState === "running" || timerState === "paused" || timerState === "break")) {
     return (
       <div
-        className={`fixed inset-0 z-[60] bg-gradient-to-b ${focusGradients[category]} flex flex-col items-center justify-center transition-all duration-1000`}
+        className={`fixed inset-0 z-[60] bg-gradient-to-b ${focusGradients[category] || defaultGradient} flex flex-col items-center justify-center transition-all duration-1000`}
       >
         {/* Exit button */}
         <button
@@ -656,7 +668,7 @@ function TimerPageInner() {
 
         {/* Plant emoji floating */}
         <div className="text-6xl mb-8 animate-sway opacity-80">
-          {timerState === "break" ? "☕" : getPlantEmoji(category, weekSessions[category])}
+          {timerState === "break" ? "☕" : getPlantEmoji(categoryMap[category]?.emoji || "🌱", weekSessions[category] || 0)}
         </div>
 
         {/* Timer circle */}
@@ -798,7 +810,7 @@ function TimerPageInner() {
 
         {/* Category Selection */}
         <div className="mb-6 grid grid-cols-3 gap-2">
-          {CATEGORY_LIST.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => handleCategoryChange(cat.id)}
@@ -813,7 +825,7 @@ function TimerPageInner() {
               <span className="text-2xl">{cat.emoji}</span>
               <span className="text-xs font-medium text-foreground">{cat.label}</span>
               <span className="text-[10px] text-muted">
-                {weekSessions[cat.id]}/{weeklyTargets[cat.id]} this week
+                {weekSessions[cat.id] || 0}/{weeklyTargets[cat.id] || 0} this week
               </span>
             </button>
           ))}
@@ -823,10 +835,10 @@ function TimerPageInner() {
         {showComplete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
             <div className="animate-grow text-center">
-              <div className="text-8xl mb-4">{CATEGORIES[completedCategory].emoji}</div>
+              <div className="text-8xl mb-4">{categoryMap[completedCategory]?.emoji || "🌱"}</div>
               <div className="text-4xl mb-2">💧</div>
               <p className="text-xl font-bold">Session Complete!</p>
-              <p className="text-muted">Your {CATEGORIES[completedCategory].plant} is growing!</p>
+              <p className="text-muted">Your {categoryMap[completedCategory]?.plant || "plant"} is growing!</p>
             </div>
           </div>
         )}
@@ -877,7 +889,7 @@ function TimerPageInner() {
                   <circle cx="140" cy="140" r="120" fill="none" stroke="currentColor" className="text-gray-100 dark:text-gray-700" strokeWidth="8" />
                   <circle
                     cx="140" cy="140" r="120" fill="none"
-                    stroke={timerState === "break" ? "#60a5fa" : selectedCategory.color}
+                    stroke={timerState === "break" ? "#60a5fa" : selectedCategory?.color || "#22c55e"}
                     strokeWidth="8" strokeLinecap="round"
                     strokeDasharray={circumference}
                     strokeDashoffset={strokeDashoffset}
@@ -886,13 +898,13 @@ function TimerPageInner() {
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-3xl mb-1">
-                    {timerState === "break" ? "☕" : getPlantEmoji(category, weekSessions[category])}
+                    {timerState === "break" ? "☕" : getPlantEmoji(categoryMap[category]?.emoji || "🌱", weekSessions[category] || 0)}
                   </span>
                   <span className="text-5xl font-bold tabular-nums">{formatTime(timeLeft)}</span>
                   <span className="text-sm text-muted mt-1">
                     {timerState === "break"
                       ? `${(sessionCount) % 4 === 0 ? "Long" : "Short"} Break`
-                      : selectedCategory.label}
+                      : selectedCategory?.label || category}
                   </span>
                 </div>
               </div>
@@ -969,12 +981,14 @@ function TimerPageInner() {
                       <input
                         type="time"
                         value={backdateTime}
-                        onChange={(e) => {
-                          setBackdateTime(e.target.value);
-                          // If timer is already running, apply adjustment immediately
-                          if ((timerState === "running" || timerState === "paused") && e.target.value) {
+                        onChange={(e) => setBackdateTime(e.target.value)}
+                        className="rounded-lg border border-card-border bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-100 dark:focus:ring-green-900"
+                      />
+                      {(timerState === "running" || timerState === "paused") && backdateTime && (
+                        <button
+                          onClick={() => {
                             const now = new Date();
-                            const [h, m] = e.target.value.split(":").map(Number);
+                            const [h, m] = backdateTime.split(":").map(Number);
                             const bd = new Date(now);
                             bd.setHours(h, m, 0, 0);
                             if (bd > now) bd.setDate(bd.getDate() - 1);
@@ -984,17 +998,20 @@ function TimerPageInner() {
                               setTimeLeft(remaining);
                               startTimeRef.current = bd.toISOString();
                               saveActiveTimer(timerState, category, totalTime, remaining, bd.toISOString());
+                              setShowBackdate(false);
+                              setBackdateTime("");
                             } else {
-                              // Exceeded duration — auto-complete
                               startTimeRef.current = bd.toISOString();
                               setShowBackdate(false);
                               setBackdateTime("");
                               completeSession();
                             }
-                          }
-                        }}
-                        className="rounded-lg border border-card-border bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-100 dark:focus:ring-green-900"
-                      />
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-green-500 text-white hover:bg-green-600 active:scale-95 transition-all font-medium"
+                        >
+                          Apply
+                        </button>
+                      )}
                       {backdateTime && (() => {
                         const now = new Date();
                         const [h, m] = backdateTime.split(":").map(Number);
@@ -1070,7 +1087,7 @@ function TimerPageInner() {
           <div className="text-center text-[10px] text-muted space-x-3 animate-fade-in">
             <span><kbd className="px-1 py-0.5 rounded border border-card-border bg-gray-50 dark:bg-gray-800 text-[9px] font-mono">Space</kbd> Start</span>
             <span><kbd className="px-1 py-0.5 rounded border border-card-border bg-gray-50 dark:bg-gray-800 text-[9px] font-mono">F</kbd> Focus</span>
-            <span><kbd className="px-1 py-0.5 rounded border border-card-border bg-gray-50 dark:bg-gray-800 text-[9px] font-mono">1-6</kbd> Category</span>
+            <span><kbd className="px-1 py-0.5 rounded border border-card-border bg-gray-50 dark:bg-gray-800 text-[9px] font-mono">1-{categories.length}</kbd> Category</span>
           </div>
         )}
 
@@ -1096,7 +1113,7 @@ function TimerPageInner() {
                 <div>
                   <label className="text-xs font-medium text-muted">Category</label>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {CATEGORY_LIST.map((cat) => (
+                    {categories.map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setManualCategory(cat.id)}
@@ -1157,22 +1174,56 @@ function TimerPageInner() {
 
         {/* Quick stats */}
         <Card>
-          <h3 className="text-sm font-semibold text-muted mb-3">This Week&apos;s Progress</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-muted">
+              {progressWeekOffset === 0 ? "This Week's Progress" : (() => {
+                const base = getWeekStart();
+                const d = new Date(base + "T00:00:00");
+                d.setDate(d.getDate() + progressWeekOffset * 7);
+                const end = new Date(d);
+                end.setDate(end.getDate() + 6);
+                const fmt = (dt: Date) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                return `${fmt(d)} – ${fmt(end)}`;
+              })()}
+            </h3>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setProgressWeekOffset((o) => o - 1)}
+                className="w-6 h-6 rounded-full border border-card-border flex items-center justify-center text-xs hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                ‹
+              </button>
+              {progressWeekOffset !== 0 && (
+                <button
+                  onClick={() => setProgressWeekOffset(0)}
+                  className="px-2 py-0.5 rounded-full text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                >
+                  Now
+                </button>
+              )}
+              <button
+                onClick={() => setProgressWeekOffset((o) => o + 1)}
+                className="w-6 h-6 rounded-full border border-card-border flex items-center justify-center text-xs hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                ›
+              </button>
+            </div>
+          </div>
           <div className="space-y-2">
-            {CATEGORY_LIST.map((cat) => (
+            {categories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-2">
                 <span className="text-sm w-5">{cat.emoji}</span>
                 <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
-                      width: `${Math.min((weekSessions[cat.id] / weeklyTargets[cat.id]) * 100, 100)}%`,
+                      width: `${Math.min(((weekSessions[cat.id] || 0) / (weeklyTargets[cat.id] || 1)) * 100, 100)}%`,
                       backgroundColor: cat.color,
                     }}
                   />
                 </div>
                 <span className="text-xs text-muted w-10 text-right">
-                  {weekSessions[cat.id]}/{weeklyTargets[cat.id]}
+                  {weekSessions[cat.id] || 0}/{weeklyTargets[cat.id] || 0}
                 </span>
               </div>
             ))}

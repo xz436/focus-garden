@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CategoryId } from "@/types";
-import { CATEGORY_LIST, CATEGORIES } from "@/lib/constants";
+import { Category } from "@/types";
 import {
   getStreakData,
   getHeatmapData,
@@ -11,8 +10,11 @@ import {
   getAchievements,
   Achievement,
   generateWeeklyReport,
+  getCategories,
+  getCategoryMap,
 } from "@/lib/store";
 import Card from "@/components/ui/Card";
+import MonthCalendar from "@/components/ui/MonthCalendar";
 import Button from "@/components/ui/Button";
 import { showToast } from "@/components/ui/Toast";
 
@@ -28,9 +30,14 @@ export default function StatsPage() {
   const [showAllAchievements, setShowAllAchievements] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [report, setReport] = useState("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
 
   useEffect(() => {
     setMounted(true);
+    const cats = getCategories();
+    setCategories(cats);
+    setCategoryMap(getCategoryMap());
     setStreakData(getStreakData());
     setHeatmapData(getHeatmapData());
     const sessions = getSessions();
@@ -200,6 +207,12 @@ export default function StatsPage() {
           </div>
         </Card>
 
+        {/* Monthly Activity Calendar */}
+        <Card className="animate-fade-in" style={{ animationDelay: "0.15s" }}>
+          <h2 className="text-sm font-semibold text-muted mb-2">Monthly Activity</h2>
+          <MonthCalendar />
+        </Card>
+
         {/* Activity Heatmap */}
         <Card className="animate-fade-in" style={{ animationDelay: "0.2s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">
@@ -269,7 +282,7 @@ export default function StatsPage() {
                 <div className="flex gap-2 mt-1">
                   {Object.entries(hoveredDay.categories).map(([cat, count]) => (
                     <span key={cat} className="flex items-center gap-0.5">
-                      {CATEGORIES[cat as CategoryId]?.emoji} {count}
+                      {categoryMap[cat]?.emoji} {count}
                     </span>
                   ))}
                 </div>
@@ -284,13 +297,13 @@ export default function StatsPage() {
             All-Time by Category
           </h2>
           <div className="space-y-2">
-            {CATEGORY_LIST.map((cat) => {
+            {categories.map((cat) => {
               const catSessions = heatmapData.reduce(
                 (sum, d) => sum + (d.categories[cat.id] || 0),
                 0
               );
               const maxSessions = Math.max(
-                ...CATEGORY_LIST.map((c) =>
+                ...categories.map((c) =>
                   heatmapData.reduce(
                     (sum, d) => sum + (d.categories[c.id] || 0),
                     0

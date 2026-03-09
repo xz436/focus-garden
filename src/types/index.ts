@@ -1,10 +1,4 @@
-export type CategoryId =
-  | "coding"
-  | "ai"
-  | "baby"
-  | "fitness"
-  | "reading"
-  | "spiritual";
+export type CategoryId = string;
 
 export type ProblemStatus = "not_started" | "in_progress" | "solved";
 export type Difficulty = "Easy" | "Medium" | "Hard";
@@ -52,7 +46,7 @@ export interface DailyPlan {
   plan_date: string;
   intentions: string | null;
   pomodoro_goal: number;
-  category_goals: Record<CategoryId, number> | null;
+  category_goals: Record<string, number> | null;
   reflection: string | null;
   created_at: string;
 }
@@ -61,7 +55,7 @@ export interface Garden {
   id: string;
   user_id: string;
   week_start: string;
-  plants: Record<CategoryId, { stage: number; sessions: number }>;
+  plants: Record<string, { stage: number; sessions: number }>;
   snapshot_data: Record<string, unknown> | null;
   created_at: string;
 }
@@ -71,7 +65,7 @@ export interface WeeklySummary {
   user_id: string;
   week_start: string;
   total_minutes: number;
-  category_breakdown: Record<CategoryId, number>;
+  category_breakdown: Record<string, number>;
   highlights: string[];
   ai_suggestions: string | null;
   goals_next_week: string[];

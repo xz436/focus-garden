@@ -130,3 +130,21 @@ create index if not exists idx_sessions_category on public.sessions(category);
 create index if not exists idx_blind75_user_id on public.blind75_problems(user_id);
 create index if not exists idx_daily_plans_user_date on public.daily_plans(user_id, plan_date);
 create index if not exists idx_gardens_user_week on public.gardens(user_id, week_start);
+
+-- Shared snapshots table (for shareable progress links)
+create table if not exists public.shared_snapshots (
+  id text primary key,
+  user_id uuid references public.profiles(id) on delete cascade,
+  display_name text,
+  snapshot_data jsonb not null,
+  created_at timestamptz default now(),
+  expires_at timestamptz
+);
+
+alter table public.shared_snapshots enable row level security;
+-- Anyone can view shared snapshots (public read)
+create policy "Anyone can view shared snapshots" on public.shared_snapshots for select using (true);
+-- Only authenticated owner can create
+create policy "Users can insert own snapshots" on public.shared_snapshots for insert with check (auth.uid() = user_id);
+-- Only owner can delete
+create policy "Users can delete own snapshots" on public.shared_snapshots for delete using (auth.uid() = user_id);

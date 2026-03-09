@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CategoryId } from "@/types";
+import { Category } from "@/types";
 import {
-  CATEGORIES,
-  CATEGORY_LIST,
   getPlantEmoji,
   getPlantStage,
   PLANT_STAGES,
@@ -16,23 +14,28 @@ import {
   getGardenSnapshots,
   getSettings,
   GardenSnapshot,
+  getCategories,
+  getCategoryMap,
 } from "@/lib/store";
 import { formatMinutes } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 
 export default function GardenPage() {
-  const [weekCounts, setWeekCounts] = useState<Record<CategoryId, number>>({
-    coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0,
-  });
+  const [weekCounts, setWeekCounts] = useState<Record<string, number>>({});
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
   const [mounted, setMounted] = useState(false);
-  const [selectedPlant, setSelectedPlant] = useState<CategoryId | null>(null);
+  const [selectedPlant, setSelectedPlant] = useState<string | null>(null);
   const [streakDays, setStreakDays] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [snapshots, setSnapshots] = useState<GardenSnapshot[]>([]);
-  const [wateringPlant, setWateringPlant] = useState<CategoryId | null>(null);
+  const [wateringPlant, setWateringPlant] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    const cats = getCategories();
+    setCategories(cats);
+    setCategoryMap(getCategoryMap());
     setWeekCounts(getWeekCategorySessions());
     setStreakDays(getStreakData().current);
     autoSnapshotPreviousWeek();
@@ -81,7 +84,7 @@ export default function GardenPage() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  const handlePlantTap = (catId: CategoryId) => {
+  const handlePlantTap = (catId: string) => {
     if (selectedPlant === catId) {
       setSelectedPlant(null);
     } else {
@@ -93,11 +96,11 @@ export default function GardenPage() {
   };
 
   // Calculate garden score
-  const gardenScore = CATEGORY_LIST.reduce((score, cat) => {
-    const pct = Math.min(weekCounts[cat.id] / settings.weeklyTargets[cat.id], 1);
+  const gardenScore = categories.reduce((score, cat) => {
+    const pct = Math.min((weekCounts[cat.id] || 0) / (settings.weeklyTargets[cat.id] || 1), 1);
     return score + pct;
   }, 0);
-  const gardenPct = Math.round((gardenScore / CATEGORY_LIST.length) * 100);
+  const gardenPct = Math.round((gardenScore / (categories.length || 1)) * 100);
 
   return (
     <div className="min-h-screen pb-24 pt-6 px-4">
@@ -158,14 +161,14 @@ export default function GardenPage() {
                   : "Start planting seeds today!"}
               </div>
               <div className="flex gap-1 mt-1.5">
-                {CATEGORY_LIST.map((cat) => {
-                  const done = weekCounts[cat.id] >= settings.weeklyTargets[cat.id];
+                {categories.map((cat) => {
+                  const done = (weekCounts[cat.id] || 0) >= (settings.weeklyTargets[cat.id] || 1);
                   return (
                     <div
                       key={cat.id}
                       className={`w-2.5 h-2.5 rounded-full transition-all ${done ? "scale-125" : "opacity-30"}`}
                       style={{ backgroundColor: cat.color }}
-                      title={`${cat.label}: ${weekCounts[cat.id]}/${settings.weeklyTargets[cat.id]}`}
+                      title={`${cat.label}: ${weekCounts[cat.id] || 0}/${settings.weeklyTargets[cat.id] || 0}`}
                     />
                   );
                 })}
@@ -349,8 +352,8 @@ export default function GardenPage() {
 
             {/* Plants Grid */}
             <div className="relative grid grid-cols-3 gap-x-8 gap-y-6 px-6 pt-20 pb-16">
-              {CATEGORY_LIST.map((cat, idx) => {
-                const sessions = weekCounts[cat.id];
+              {categories.map((cat, idx) => {
+                const sessions = weekCounts[cat.id] || 0;
                 const isSelected = selectedPlant === cat.id;
                 const isWatering = wateringPlant === cat.id;
                 const plantSize =
@@ -412,7 +415,7 @@ export default function GardenPage() {
                         transform: isWatering ? "scale(1.15)" : undefined,
                       }}
                     >
-                      {getPlantEmoji(cat.id, sessions)}
+                      {getPlantEmoji(cat.emoji, sessions)}
                     </div>
 
                     <div
@@ -445,32 +448,32 @@ export default function GardenPage() {
         {selectedPlant && (
           <Card
             className="animate-slide-up border-2"
-            style={{ borderColor: CATEGORIES[selectedPlant].color }}
+            style={{ borderColor: categoryMap[selectedPlant]?.color }}
           >
             <div className="flex items-start gap-4">
               <div className="text-5xl animate-sway">
-                {getPlantEmoji(selectedPlant, weekCounts[selectedPlant])}
+                {getPlantEmoji(categoryMap[selectedPlant]?.emoji || "🌱", weekCounts[selectedPlant] || 0)}
               </div>
               <div className="flex-1">
                 <h3 className="font-bold text-lg">
-                  {CATEGORIES[selectedPlant].emoji}{" "}
-                  {CATEGORIES[selectedPlant].plant}
+                  {categoryMap[selectedPlant]?.emoji}{" "}
+                  {categoryMap[selectedPlant]?.plant}
                 </h3>
                 <p className="text-sm text-muted">
-                  {CATEGORIES[selectedPlant].label}
+                  {categoryMap[selectedPlant]?.label}
                 </p>
                 <div className="mt-2">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium">
-                      Stage: {getPlantStage(weekCounts[selectedPlant]).name}
+                      Stage: {getPlantStage(weekCounts[selectedPlant] || 0).name}
                     </span>
                     <span className="text-xs text-muted">
-                      ({weekCounts[selectedPlant]} sessions this week)
+                      ({weekCounts[selectedPlant] || 0} sessions this week)
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted">
-                    <span>Target: {settings.weeklyTargets[selectedPlant]}/week</span>
-                    {weekCounts[selectedPlant] >= settings.weeklyTargets[selectedPlant] && (
+                    <span>Target: {settings.weeklyTargets[selectedPlant] || 0}/week</span>
+                    {(weekCounts[selectedPlant] || 0) >= (settings.weeklyTargets[selectedPlant] || 0) && (
                       <span className="text-green-600 font-medium">Target reached! 🎉</span>
                     )}
                   </div>
@@ -479,7 +482,7 @@ export default function GardenPage() {
                 <div className="mt-3">
                   <div className="flex gap-2">
                     {PLANT_STAGES.map((s, idx) => {
-                      const currentStage = getPlantStage(weekCounts[selectedPlant]);
+                      const currentStage = getPlantStage(weekCounts[selectedPlant] || 0);
                       const isReached = PLANT_STAGES.indexOf(currentStage) >= idx;
                       const isCurrent = PLANT_STAGES.indexOf(currentStage) === idx;
                       return (
@@ -522,7 +525,7 @@ export default function GardenPage() {
         <Card className="animate-fade-in" style={{ animationDelay: "0.4s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">Your Plants</h2>
           <div className="space-y-3">
-            {CATEGORY_LIST.map((cat) => {
+            {categories.map((cat) => {
               const sessions = weekCounts[cat.id];
               const stage = getPlantStage(sessions);
               const target = settings.weeklyTargets[cat.id];
@@ -535,7 +538,7 @@ export default function GardenPage() {
               return (
                 <div key={cat.id} className="flex items-center gap-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                   <span className="text-3xl">
-                    {getPlantEmoji(cat.id, sessions)}
+                    {getPlantEmoji(cat.emoji, sessions)}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -618,13 +621,13 @@ export default function GardenPage() {
 
                       {/* Mini garden */}
                       <div className="flex justify-around py-2 px-4 rounded-lg bg-gradient-to-b from-sky-50 to-green-50 dark:from-sky-900/20 dark:to-green-900/20">
-                        {CATEGORY_LIST.map((cat) => (
+                        {categories.map((cat) => (
                           <div key={cat.id} className="flex flex-col items-center gap-0.5">
-                            <span className={getPlantStage(snap.plants[cat.id]).size}>
-                              {getPlantEmoji(cat.id, snap.plants[cat.id])}
+                            <span className={getPlantStage(snap.plants[cat.id] || 0).size}>
+                              {getPlantEmoji(cat.emoji, snap.plants[cat.id] || 0)}
                             </span>
                             <span className="text-[8px] text-muted">
-                              {snap.plants[cat.id]} 💧
+                              {snap.plants[cat.id] || 0} 💧
                             </span>
                           </div>
                         ))}

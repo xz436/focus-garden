@@ -1,5 +1,3 @@
-import { CategoryId } from "@/types";
-
 export function formatMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -28,18 +26,6 @@ export function getWeekStart(date: Date = new Date()): string {
 
 export function getToday(): string {
   return toLocalDateString(new Date());
-}
-
-export function getCategoryColor(category: CategoryId): string {
-  const colors: Record<CategoryId, string> = {
-    coding: "#22c55e",
-    ai: "#f59e0b",
-    baby: "#ec4899",
-    fitness: "#10b981",
-    reading: "#ef4444",
-    spiritual: "#a855f7",
-  };
-  return colors[category];
 }
 
 export function getGreeting(): string {

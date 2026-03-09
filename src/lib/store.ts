@@ -1,7 +1,7 @@
 "use client";
 
-import { CategoryId, Session, Blind75Problem, ProblemStatus } from "@/types";
-import { BLIND75_PROBLEMS } from "@/lib/constants";
+import { Session, Blind75Problem, ProblemStatus, Category } from "@/types";
+import { BLIND75_PROBLEMS, DEFAULT_CATEGORIES } from "@/lib/constants";
 import { getWeekStart, getToday, toLocalDateString } from "@/lib/utils";
 
 const STORAGE_KEYS = {
@@ -13,7 +13,19 @@ const STORAGE_KEYS = {
   gardenSnapshots: "fg_garden_snapshots",
   achievements: "fg_achievements",
   babyLogs: "fg_baby_logs",
+  weeklyPlans: "fg_weekly_plans",
 };
+
+// Current authenticated user ID (set by AuthProvider)
+let currentUserId = "local";
+
+export function setCurrentUserId(id: string) {
+  currentUserId = id;
+}
+
+export function getCurrentUserId(): string {
+  return currentUserId;
+}
 
 function getStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -40,7 +52,7 @@ export function addSession(session: Omit<Session, "id" | "user_id" | "created_at
   const newSession: Session = {
     ...session,
     id: crypto.randomUUID(),
-    user_id: "local",
+    user_id: currentUserId,
     created_at: new Date().toISOString(),
   };
   sessions.push(newSession);
@@ -64,32 +76,25 @@ export function getWeekSessions(): Session[] {
 
 export function getSessionsByCategory(
   sessions: Session[]
-): Record<CategoryId, Session[]> {
-  const result: Record<string, Session[]> = {
-    coding: [],
-    ai: [],
-    baby: [],
-    fitness: [],
-    reading: [],
-    spiritual: [],
-  };
+): Record<string, Session[]> {
+  const categories = getCategories();
+  const result: Record<string, Session[]> = Object.fromEntries(categories.map(c => [c.id, []]));
   for (const s of sessions) {
-    if (result[s.category]) {
-      result[s.category].push(s);
-    }
+    if (!result[s.category]) result[s.category] = [];
+    result[s.category].push(s);
   }
-  return result as Record<CategoryId, Session[]>;
+  return result;
 }
 
 export function getCategoryMinutes(
   sessions: Session[]
-): Record<CategoryId, number> {
+): Record<string, number> {
   const byCategory = getSessionsByCategory(sessions);
   const result: Record<string, number> = {};
   for (const [cat, catSessions] of Object.entries(byCategory)) {
     result[cat] = catSessions.reduce((sum, s) => sum + s.duration_minutes, 0);
   }
-  return result as Record<CategoryId, number>;
+  return result;
 }
 
 // Blind 75 Problems
@@ -105,7 +110,7 @@ export function getProblems(): Blind75Problem[] {
 export function initializeProblems() {
   const problems: Blind75Problem[] = BLIND75_PROBLEMS.map((p) => ({
     id: crypto.randomUUID(),
-    user_id: "local",
+    user_id: currentUserId,
     problem_name: p.name,
     category: p.category,
     difficulty: p.difficulty,
@@ -145,22 +150,39 @@ export function getProblemsByCategory(): Record<string, Blind75Problem[]> {
   return result;
 }
 
-export function getWeekCategorySessions(): Record<CategoryId, number> {
+export function getWeekCategorySessions(): Record<string, number> {
   const weekSessions = getWeekSessions();
-  const result: Record<string, number> = {
-    coding: 0,
-    ai: 0,
-    baby: 0,
-    fitness: 0,
-    reading: 0,
-    spiritual: 0,
-  };
+  const categories = getCategories();
+  const result: Record<string, number> = Object.fromEntries(categories.map(c => [c.id, 0]));
   for (const s of weekSessions) {
     if (result[s.category] !== undefined) {
       result[s.category]++;
+    } else {
+      result[s.category] = 1;
     }
   }
-  return result as Record<CategoryId, number>;
+  return result;
+}
+
+export function getWeekCategorySessionsForWeek(weekStartDate: string): Record<string, number> {
+  const categories = getCategories();
+  const result: Record<string, number> = Object.fromEntries(categories.map(c => [c.id, 0]));
+  const weekEnd = new Date(weekStartDate + "T00:00:00");
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekEndStr = toLocalDateString(weekEnd);
+  const allSessions = getSessions();
+  for (const s of allSessions) {
+    if (!s.completed_at) continue;
+    const d = toLocalDateString(new Date(s.completed_at));
+    if (d >= weekStartDate && d <= weekEndStr) {
+      if (result[s.category] !== undefined) {
+        result[s.category]++;
+      } else {
+        result[s.category] = 1;
+      }
+    }
+  }
+  return result;
 }
 
 export function deleteSession(id: string) {
@@ -172,7 +194,7 @@ export function deleteSession(id: string) {
 export interface DailyPlanLocal {
   date: string;
   intentions: string;
-  categoryGoals: Record<CategoryId, number>;
+  categoryGoals: Record<string, number>;
   reflection: string;
   pomodoroGoal: number;
 }
@@ -186,6 +208,49 @@ export function saveDailyPlan(plan: DailyPlanLocal) {
   const plans = getStorage<Record<string, DailyPlanLocal>>(STORAGE_KEYS.plans, {});
   plans[plan.date] = plan;
   setStorage(STORAGE_KEYS.plans, plans);
+}
+
+// Get daily plan with weekly plan tasks merged in
+export function getDailyPlanWithWeekly(date: string): DailyPlanLocal | null {
+  const dailyPlan = getDailyPlan(date);
+  const weekStart = getWeekStart(new Date(date + "T00:00:00"));
+  const weeklyPlan = getWeeklyPlan(weekStart);
+  const weeklyDay = weeklyPlan?.days?.[date];
+
+  if (!dailyPlan && !weeklyDay) return null;
+
+  const weeklyIntentions = weeklyDay?.tasks?.filter(Boolean).join("\n") || "";
+  const weeklyGoals: Record<string, number> = {};
+  if (weeklyDay?.categoryFocus) {
+    for (const catId of weeklyDay.categoryFocus) {
+      weeklyGoals[catId] = 1;
+    }
+  }
+
+  if (dailyPlan) {
+    // Daily plan exists — merge weekly tasks if daily intentions are empty
+    return {
+      ...dailyPlan,
+      intentions: dailyPlan.intentions || weeklyIntentions,
+      categoryGoals: Object.values(dailyPlan.categoryGoals).some((v) => v > 0)
+        ? dailyPlan.categoryGoals
+        : { ...weeklyGoals, ...dailyPlan.categoryGoals },
+    };
+  }
+
+  // No daily plan — create one from weekly data
+  const settings = getSettings();
+  const cats = getCategories();
+  return {
+    date,
+    intentions: weeklyIntentions,
+    categoryGoals: {
+      ...Object.fromEntries(cats.map((c) => [c.id, 0])),
+      ...weeklyGoals,
+    },
+    reflection: "",
+    pomodoroGoal: settings.pomodoroGoal,
+  };
 }
 
 export function getAllPlans(): Record<string, DailyPlanLocal> {
@@ -212,32 +277,50 @@ export function saveBabyLog(log: BabyDailyLog) {
 // Settings
 export interface AppSettings {
   displayName: string;
-  weeklyTargets: Record<CategoryId, number>;
-  timerDurations: Record<CategoryId, number>;
+  weeklyTargets: Record<string, number>;
+  timerDurations: Record<string, number>;
   pomodoroGoal: number;
   shortBreak: number;
   longBreak: number;
   babyName: string;
   babyBirthdate: string;
+  categories: Category[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   displayName: "Xiaochan",
-  weeklyTargets: { coding: 15, ai: 8, baby: 14, fitness: 5, reading: 5, spiritual: 7 },
-  timerDurations: { coding: 25, ai: 25, baby: 30, fitness: 45, reading: 25, spiritual: 25 },
+  weeklyTargets: Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c.id, c.weeklyTarget])),
+  timerDurations: Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c.id, c.defaultMinutes])),
   pomodoroGoal: 5,
   shortBreak: 5,
   longBreak: 15,
   babyName: "",
   babyBirthdate: "",
+  categories: DEFAULT_CATEGORIES,
 };
 
 export function getSettings(): AppSettings {
-  return { ...DEFAULT_SETTINGS, ...getStorage<Partial<AppSettings>>(STORAGE_KEYS.settings, {}) };
+  const stored = getStorage<Partial<AppSettings>>(STORAGE_KEYS.settings, {});
+  const settings = { ...DEFAULT_SETTINGS, ...stored };
+  // Migration: existing users without categories get defaults
+  if (!stored.categories || !Array.isArray(stored.categories) || stored.categories.length === 0) {
+    settings.categories = DEFAULT_CATEGORIES;
+  }
+  return settings;
 }
 
 export function saveSettings(settings: AppSettings) {
   setStorage(STORAGE_KEYS.settings, settings);
+}
+
+// Dynamic category helpers
+export function getCategories(): Category[] {
+  return getSettings().categories;
+}
+
+export function getCategoryMap(): Record<string, Category> {
+  const categories = getCategories();
+  return Object.fromEntries(categories.map(c => [c.id, c]));
 }
 
 // Streaks
@@ -330,6 +413,7 @@ export function exportData(): string {
     gardenSnapshots: getGardenSnapshots(),
     achievements: getAchievements(),
     babyLogs: getStorage<Record<string, BabyDailyLog>>(STORAGE_KEYS.babyLogs, {}),
+    weeklyPlans: getAllWeeklyPlans(),
     exportedAt: new Date().toISOString(),
   }, null, 2);
 }
@@ -348,6 +432,7 @@ export function importData(json: string): boolean {
     if (data.gardenSnapshots) setStorage(STORAGE_KEYS.gardenSnapshots, data.gardenSnapshots);
     if (data.achievements) setStorage(STORAGE_KEYS.achievements, data.achievements);
     if (data.babyLogs) setStorage(STORAGE_KEYS.babyLogs, data.babyLogs);
+    if (data.weeklyPlans) setStorage(STORAGE_KEYS.weeklyPlans, data.weeklyPlans);
     return true;
   } catch {
     return false;
@@ -358,7 +443,7 @@ export function importData(json: string): boolean {
 export interface GardenSnapshot {
   weekStart: string;
   weekEnd: string;
-  plants: Record<CategoryId, number>;
+  plants: Record<string, number>;
   totalSessions: number;
   totalMinutes: number;
   gardenHealth: string;
@@ -377,9 +462,8 @@ export function saveGardenSnapshot(): GardenSnapshot | null {
   if (snapshots.find((s) => s.weekStart === weekStart)) return null;
 
   const weekSessions = getWeekSessions();
-  const plants: Record<string, number> = {
-    coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0,
-  };
+  const categories = getCategories();
+  const plants: Record<string, number> = Object.fromEntries(categories.map(c => [c.id, 0]));
   let totalMinutes = 0;
   for (const s of weekSessions) {
     plants[s.category] = (plants[s.category] || 0) + 1;
@@ -401,7 +485,7 @@ export function saveGardenSnapshot(): GardenSnapshot | null {
   const snapshot: GardenSnapshot = {
     weekStart,
     weekEnd: toLocalDateString(weekEnd),
-    plants: plants as Record<CategoryId, number>,
+    plants,
     totalSessions,
     totalMinutes,
     gardenHealth,
@@ -441,9 +525,8 @@ export function autoSnapshotPreviousWeek() {
 
   if (lastWeekSessions.length === 0) return;
 
-  const plants: Record<string, number> = {
-    coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0,
-  };
+  const categories = getCategories();
+  const plants: Record<string, number> = Object.fromEntries(categories.map(c => [c.id, 0]));
   let totalMinutes = 0;
   for (const s of lastWeekSessions) {
     plants[s.category] = (plants[s.category] || 0) + 1;
@@ -461,7 +544,7 @@ export function autoSnapshotPreviousWeek() {
   const snapshot: GardenSnapshot = {
     weekStart: lastWeekStart,
     weekEnd: lastWeekEndStr,
-    plants: plants as Record<CategoryId, number>,
+    plants,
     totalSessions,
     totalMinutes,
     gardenHealth,
@@ -553,7 +636,8 @@ export function checkAndUnlockAchievements(): Achievement[] {
 
   // Daily achievements
   const todayCategories = new Set(todaySess.map((s) => s.category));
-  if (todayCategories.size >= 6) tryUnlock("all_categories");
+  const categories = getCategories();
+  if (todayCategories.size >= categories.length) tryUnlock("all_categories");
   if (todaySess.length >= 5) tryUnlock("five_in_day");
   if (todaySess.length >= 10) tryUnlock("ten_in_day");
 
@@ -633,14 +717,7 @@ export function generateWeeklyReport(): string {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  const catLines = [
-    { id: "coding" as CategoryId, emoji: "🌵" },
-    { id: "ai" as CategoryId, emoji: "🌻" },
-    { id: "baby" as CategoryId, emoji: "🌷" },
-    { id: "fitness" as CategoryId, emoji: "🌿" },
-    { id: "reading" as CategoryId, emoji: "🌹" },
-    { id: "spiritual" as CategoryId, emoji: "🪻" },
-  ];
+  const catLines = getCategories();
 
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
@@ -655,8 +732,8 @@ export function generateWeeklyReport(): string {
   report += `🌿 Garden Progress\n`;
 
   for (const cat of catLines) {
-    const count = weekCounts[cat.id];
-    const target = settings.weeklyTargets[cat.id];
+    const count = weekCounts[cat.id] || 0;
+    const target = settings.weeklyTargets[cat.id] || cat.weeklyTarget;
     const bar = "█".repeat(Math.min(count, target)) + "░".repeat(Math.max(0, target - count));
     const status = count >= target ? " ✅" : "";
     report += `   ${cat.emoji} ${bar} ${count}/${target}${status}\n`;
@@ -679,6 +756,87 @@ export function generateWeeklyReport(): string {
     for (const h of highlights) {
       report += `   ${h}\n`;
     }
+  }
+
+  report += `\n— Sent from Focus Garden 🌱`;
+  return report;
+}
+
+// Weekly Plans
+export interface WeeklyPlanSection {
+  title: string;
+  content: string;
+}
+
+export interface WeeklyPlanLocal {
+  weekStart: string;
+  overallGoals: string;
+  sections: WeeklyPlanSection[];
+  categoryTargets: Record<string, number>;
+  days: Record<string, {
+    goals: string;
+    categoryFocus: string[];
+    tasks: string[];
+    reflection: string;
+  }>;
+  familyMeetingNotes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getWeeklyPlan(weekStart: string): WeeklyPlanLocal | null {
+  const plans = getStorage<Record<string, WeeklyPlanLocal>>(STORAGE_KEYS.weeklyPlans, {});
+  return plans[weekStart] || null;
+}
+
+export function saveWeeklyPlan(plan: WeeklyPlanLocal) {
+  const plans = getStorage<Record<string, WeeklyPlanLocal>>(STORAGE_KEYS.weeklyPlans, {});
+  plans[plan.weekStart] = { ...plan, updatedAt: new Date().toISOString() };
+  setStorage(STORAGE_KEYS.weeklyPlans, plans);
+}
+
+export function getAllWeeklyPlans(): Record<string, WeeklyPlanLocal> {
+  return getStorage<Record<string, WeeklyPlanLocal>>(STORAGE_KEYS.weeklyPlans, {});
+}
+
+export function generateDailyReport(): string {
+  const settings = getSettings();
+  const todaySessions = getTodaySessions();
+  const { current: streak } = getStreakData();
+  const totalMinutes = todaySessions.reduce((sum, s) => sum + s.duration_minutes, 0);
+  const categories = getCategories();
+
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+  const today = new Date();
+  const dateStr = today.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+
+  const categoryCounts: Record<string, number> = {};
+  for (const s of todaySessions) {
+    categoryCounts[s.category] = (categoryCounts[s.category] || 0) + 1;
+  }
+
+  let report = `🌱 Focus Garden Daily Progress\n`;
+  report += `📅 ${dateStr}\n`;
+  report += `👤 ${settings.displayName}\n\n`;
+  report += `📊 Today's Stats\n`;
+  report += `   ${todaySessions.length} sessions · ${timeStr} focus time\n`;
+  if (streak > 0) report += `   🔥 ${streak} day streak\n`;
+  report += `\n`;
+
+  report += `🌿 Sessions by Category\n`;
+  for (const cat of categories) {
+    const count = categoryCounts[cat.id] || 0;
+    if (count > 0) {
+      report += `   ${cat.emoji} ${cat.label}: ${count} session${count > 1 ? "s" : ""}\n`;
+    }
+  }
+
+  const inactive = categories.filter((c) => !categoryCounts[c.id]);
+  if (inactive.length > 0 && inactive.length < categories.length) {
+    report += `\n   Still to do: ${inactive.map((c) => c.emoji).join(" ")}\n`;
   }
 
   report += `\n— Sent from Focus Garden 🌱`;

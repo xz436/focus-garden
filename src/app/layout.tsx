@@ -5,6 +5,8 @@ import BottomNav from "@/components/ui/BottomNav";
 import ToastContainer from "@/components/ui/Toast";
 import Confetti from "@/components/ui/Confetti";
 import ThemeProvider from "@/components/ui/ThemeProvider";
+import AuthProvider from "@/components/providers/AuthProvider";
+import LanguageProvider from "@/components/providers/LanguageProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,10 +53,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
-          {children}
-          <Confetti />
-          <ToastContainer />
-          <BottomNav />
+          <LanguageProvider>
+            <AuthProvider>
+              {children}
+              <Confetti />
+              <ToastContainer />
+              <BottomNav />
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

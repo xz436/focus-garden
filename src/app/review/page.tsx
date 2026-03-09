@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CategoryId, Session } from "@/types";
-import { CATEGORIES, CATEGORY_LIST, getPlantEmoji } from "@/lib/constants";
-import { getSessions, getSettings, generateWeeklyReport } from "@/lib/store";
+import { Category, Session } from "@/types";
+import { getPlantEmoji } from "@/lib/constants";
+import { getSessions, getSettings, generateWeeklyReport, getCategories } from "@/lib/store";
 import { formatMinutes, getWeekStart, toLocalDateString } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -12,19 +12,21 @@ import { showToast } from "@/components/ui/Toast";
 
 export default function WeeklyReviewPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [mounted, setMounted] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, -1 = last week, etc.
 
   useEffect(() => {
     setMounted(true);
     setSessions(getSessions());
+    setCategories(getCategories());
   }, []);
 
   const settings = useMemo(() => getSettings(), []);
 
   const getWeekData = (offset: number) => {
     const now = new Date();
-    const weekStart = new Date(getWeekStart());
+    const weekStart = new Date(getWeekStart() + "T00:00:00");
     weekStart.setDate(weekStart.getDate() + offset * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
@@ -39,9 +41,7 @@ export default function WeeklyReviewPage() {
         toLocalDateString(new Date(s.completed_at)) <= weekEndStr
     );
 
-    const catCounts: Record<CategoryId, number> = {
-      coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0,
-    };
+    const catCounts: Record<string, number> = Object.fromEntries(categories.map(c => [c.id, 0]));
     let totalMinutes = 0;
     const dailyCounts: Record<string, number> = {};
 
@@ -68,8 +68,8 @@ export default function WeeklyReviewPage() {
     };
   };
 
-  const thisWeek = useMemo(() => getWeekData(weekOffset), [sessions, weekOffset]);
-  const prevWeek = useMemo(() => getWeekData(weekOffset - 1), [sessions, weekOffset]);
+  const thisWeek = useMemo(() => getWeekData(weekOffset), [sessions, weekOffset, categories]);
+  const prevWeek = useMemo(() => getWeekData(weekOffset - 1), [sessions, weekOffset, categories]);
 
   const formatWeekRange = (start: string, end: string) => {
     const s = new Date(start + "T00:00:00");
@@ -87,8 +87,17 @@ export default function WeeklyReviewPage() {
     return { text: "Same", positive: null };
   };
 
-  const copyReport = () => {
-    navigator.clipboard.writeText(generateWeeklyReport());
+  const copyReport = async () => {
+    const text = generateWeeklyReport();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Focus Garden - Weekly Report", text });
+        return;
+      } catch (e) {
+        if ((e as DOMException).name === "AbortError") return;
+      }
+    }
+    navigator.clipboard.writeText(text);
     showToast({ emoji: "📋", title: "Report copied!", type: "success" });
   };
 
@@ -126,7 +135,7 @@ export default function WeeklyReviewPage() {
                 onClick={() => setWeekOffset(0)}
                 className="px-3 py-1.5 rounded-lg border border-card-border text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                Today
+                Current Week
               </button>
             )}
             <button
@@ -182,12 +191,12 @@ export default function WeeklyReviewPage() {
         <Card className="animate-fade-in" style={{ animationDelay: "0.2s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">Garden</h2>
           <div className="flex justify-around py-4 bg-gradient-to-b from-sky-50 to-green-50 dark:from-sky-900/20 dark:to-green-900/20 rounded-xl">
-            {CATEGORY_LIST.map((cat) => {
-              const count = thisWeek.catCounts[cat.id];
+            {categories.map((cat) => {
+              const count = thisWeek.catCounts[cat.id] || 0;
               return (
                 <div key={cat.id} className="flex flex-col items-center gap-1">
                   <div className={`text-3xl ${count > 0 ? "animate-sway" : "opacity-30"}`}>
-                    {getPlantEmoji(cat.id, count)}
+                    {getPlantEmoji(cat.emoji, count)}
                   </div>
                   <div className="text-[10px] font-medium" style={{ color: count > 0 ? cat.color : "#9ca3af" }}>
                     {count} 💧
@@ -198,42 +207,33 @@ export default function WeeklyReviewPage() {
           </div>
         </Card>
 
-        {/* Category Comparison with Previous Week */}
+        {/* Category Progress */}
         <Card className="animate-fade-in" style={{ animationDelay: "0.25s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">Category Progress</h2>
-          <div className="space-y-3">
-            {CATEGORY_LIST.map((cat) => {
-              const current = thisWeek.catCounts[cat.id];
-              const prev = prevWeek.catCounts[cat.id];
+          <div className="space-y-2.5">
+            {categories.map((cat) => {
+              const current = thisWeek.catCounts[cat.id] || 0;
               const target = settings.weeklyTargets[cat.id];
-              const delta = getDelta(current, prev);
               const isComplete = current >= target;
+              const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
 
               return (
-                <div key={cat.id}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm">
-                      {cat.emoji} {cat.label}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-medium ${
-                        delta.positive === true ? "text-green-600" : delta.positive === false ? "text-red-500" : "text-muted"
-                      }`}>
-                        {delta.positive === true ? "↑" : delta.positive === false ? "↓" : ""}{delta.text}
-                      </span>
-                      {isComplete && <span className="text-xs">✅</span>}
+                <div key={cat.id} className="flex items-center gap-3">
+                  <span className="text-lg w-7">{cat.emoji}</span>
+                  <div className="flex-1">
+                    <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: isComplete ? "#22c55e" : cat.color,
+                        }}
+                      />
                     </div>
                   </div>
-                  <ProgressBar
-                    value={current}
-                    max={target}
-                    color={isComplete ? "#22c55e" : cat.color}
-                    size="sm"
-                  />
-                  <div className="flex justify-between mt-0.5">
-                    <span className="text-[9px] text-muted">{current}/{target} target</span>
-                    <span className="text-[9px] text-muted">prev: {prev}</span>
-                  </div>
+                  <span className={`text-xs w-12 text-right ${isComplete ? "text-green-600 font-medium" : "text-muted"}`}>
+                    {current}/{target}{isComplete ? " ✅" : ""}
+                  </span>
                 </div>
               );
             })}
@@ -243,34 +243,74 @@ export default function WeeklyReviewPage() {
         {/* Daily Breakdown */}
         <Card className="animate-fade-in" style={{ animationDelay: "0.3s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">Daily Breakdown</h2>
-          <div className="flex items-end gap-1 h-24">
+          <div className="space-y-2">
             {Array.from({ length: 7 }).map((_, i) => {
               const d = new Date(thisWeek.weekStart + "T00:00:00");
               d.setDate(d.getDate() + i);
               const dateStr = toLocalDateString(d);
               const count = thisWeek.dailyCounts[dateStr] || 0;
               const maxCount = Math.max(...Object.values(thisWeek.dailyCounts), 1);
-              const height = (count / maxCount) * 100;
               const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+              const dayNum = d.getDate();
               const isToday = dateStr === toLocalDateString(new Date());
 
+              // Get sessions for this day by category
+              const daySessions = thisWeek.sessions.filter(
+                (s) => s.completed_at && toLocalDateString(new Date(s.completed_at)) === dateStr
+              );
+              const dayCatCounts: Record<string, number> = {};
+              for (const s of daySessions) {
+                dayCatCounts[s.category] = (dayCatCounts[s.category] || 0) + 1;
+              }
+
               return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-[9px] font-medium">{count}</span>
-                  <div
-                    className={`w-full rounded-t transition-all duration-500 ${
-                      count > 0
-                        ? "bg-gradient-to-t from-green-500 to-emerald-400"
-                        : "bg-gray-100 dark:bg-gray-700"
-                    }`}
-                    style={{ height: `${Math.max(height, 8)}%` }}
-                  />
-                  <span className={`text-[9px] ${isToday ? "font-bold text-green-600" : "text-muted"}`}>
-                    {dayName}
+                <div key={i} className="flex items-center gap-3">
+                  <div className={`w-12 text-right ${isToday ? "font-bold text-green-600 dark:text-green-400" : "text-muted"}`}>
+                    <div className="text-xs">{dayName}</div>
+                    <div className="text-[10px]">{dayNum}</div>
+                  </div>
+                  <div className="flex-1">
+                    {count > 0 ? (
+                      <div className="flex gap-0.5 h-6">
+                        {categories.map((cat) => {
+                          const catCount = dayCatCounts[cat.id] || 0;
+                          if (catCount === 0) return null;
+                          const width = (catCount / maxCount) * 100;
+                          return (
+                            <div
+                              key={cat.id}
+                              className="h-full rounded transition-all"
+                              style={{
+                                width: `${width}%`,
+                                backgroundColor: cat.color,
+                                minWidth: "16px",
+                              }}
+                              title={`${cat.label}: ${catCount}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="h-6 flex items-center">
+                        <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800" />
+                      </div>
+                    )}
+                  </div>
+                  <span className={`text-xs w-6 text-right ${count > 0 ? "font-medium" : "text-muted"}`}>
+                    {count}
                   </span>
                 </div>
               );
             })}
+          </div>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-card-border">
+            {categories.map((cat) => (
+              <div key={cat.id} className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cat.color }} />
+                <span className="text-[9px] text-muted">{cat.label.split(" ")[0]}</span>
+              </div>
+            ))}
           </div>
         </Card>
 
@@ -280,7 +320,7 @@ export default function WeeklyReviewPage() {
           <div className="space-y-1.5 text-sm text-green-600 dark:text-green-400">
             {(() => {
               const highlights: string[] = [];
-              const completedCats = CATEGORY_LIST.filter(
+              const completedCats = categories.filter(
                 (c) => thisWeek.catCounts[c.id] >= settings.weeklyTargets[c.id]
               );
               if (completedCats.length > 0) {
@@ -310,7 +350,7 @@ export default function WeeklyReviewPage() {
         {/* Share */}
         {weekOffset === 0 && (
           <Button onClick={copyReport} className="w-full animate-fade-in" style={{ animationDelay: "0.4s" }}>
-            📋 Copy Weekly Report
+            📤 Share Weekly Report
           </Button>
         )}
       </div>

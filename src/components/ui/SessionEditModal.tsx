@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { CategoryId, Session } from "@/types";
-import { CATEGORIES, CATEGORY_LIST } from "@/lib/constants";
+import { useState, useEffect } from "react";
+import { Category, Session } from "@/types";
+import { getCategories } from "@/lib/store";
 import { editSession } from "@/lib/store";
 import Button from "@/components/ui/Button";
 
@@ -17,9 +17,14 @@ export default function SessionEditModal({
   onClose,
   onSave,
 }: SessionEditModalProps) {
-  const [category, setCategory] = useState<CategoryId>(session.category);
+  const [category, setCategory] = useState(session.category);
   const [duration, setDuration] = useState(session.duration_minutes);
   const [notes, setNotes] = useState(session.notes || "");
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  useEffect(() => {
+    setCategories(getCategories());
+  }, []);
 
   const handleSave = () => {
     editSession(session.id, {
@@ -54,7 +59,7 @@ export default function SessionEditModal({
             Category
           </label>
           <div className="grid grid-cols-3 gap-2">
-            {CATEGORY_LIST.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setCategory(cat.id)}

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CategoryId } from "@/types";
-import { CATEGORY_LIST } from "@/lib/constants";
+import { Category } from "@/types";
+import { PLANT_PRESETS } from "@/lib/constants";
 import {
   getSettings,
   saveSettings,
@@ -13,6 +13,8 @@ import {
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useTheme } from "@/components/ui/ThemeProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
+import LanguageSelector from "@/components/ui/LanguageSelector";
 import { showToast } from "@/components/ui/Toast";
 
 export default function SettingsPage() {
@@ -22,7 +24,11 @@ export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { theme, setTheme } = useTheme();
+  const { user, signOut } = useAuth();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [editingPillar, setEditingPillar] = useState<string | null>(null);
+  const [newPillar, setNewPillar] = useState(false);
+  const [pillarForm, setPillarForm] = useState({ label: "", emoji: "🌸", plant: "Cherry Blossom", color: "#f472b6", colorClass: "text-pink-400", bgClass: "bg-pink-400", defaultMinutes: 25, weeklyTarget: 5 });
 
   useEffect(() => {
     setMounted(true);
@@ -100,6 +106,200 @@ export default function SettingsPage() {
           </div>
         </Card>
 
+        {/* Account */}
+        {user && (
+          <Card className="animate-fade-in" style={{ animationDelay: "0.1s" }}>
+            <h2 className="text-sm font-semibold text-muted mb-3">Account</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">{user.email}</p>
+                <p className="text-xs text-muted">Signed in</p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => signOut()}
+              >
+                Log Out
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Life Pillars */}
+        <Card className="animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          <h2 className="text-sm font-semibold text-muted mb-3">Life Pillars</h2>
+          <p className="text-xs text-muted mb-3">Customize your focus categories (1-8 pillars)</p>
+          <div className="space-y-2">
+            {settings.categories.map((cat, idx) => (
+              <div key={cat.id}>
+                {editingPillar === cat.id ? (
+                  <div className="rounded-xl border border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10 p-3 space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted">Name</label>
+                      <input
+                        type="text"
+                        value={pillarForm.label}
+                        onChange={(e) => setPillarForm({ ...pillarForm, label: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-card-border bg-white dark:bg-gray-800 px-3 py-1.5 text-sm focus:outline-none focus:border-green-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted mb-1 block">Plant</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {PLANT_PRESETS.map((p) => (
+                          <button
+                            key={p.emoji}
+                            onClick={() => setPillarForm({ ...pillarForm, emoji: p.emoji, plant: p.plant, color: p.color, colorClass: p.colorClass, bgClass: p.bgClass })}
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-all ${
+                              pillarForm.emoji === p.emoji ? "ring-2 ring-green-400 scale-110 bg-green-50 dark:bg-green-900/30" : "bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            }`}
+                          >
+                            {p.emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-muted">Timer (min)</label>
+                        <input type="number" value={pillarForm.defaultMinutes} onChange={(e) => setPillarForm({ ...pillarForm, defaultMinutes: Number(e.target.value) })} min={5} max={120} className="mt-1 w-full rounded-lg border border-card-border bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-center focus:outline-none focus:border-green-400" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted">Weekly target</label>
+                        <input type="number" value={pillarForm.weeklyTarget} onChange={(e) => setPillarForm({ ...pillarForm, weeklyTarget: Number(e.target.value) })} min={0} max={50} className="mt-1 w-full rounded-lg border border-card-border bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-center focus:outline-none focus:border-green-400" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="secondary" onClick={() => setEditingPillar(null)} className="flex-1" size="sm">Cancel</Button>
+                      <Button onClick={() => {
+                        if (!pillarForm.label.trim()) return;
+                        const updated = settings.categories.map(c => c.id === cat.id ? { ...c, label: pillarForm.label.trim(), emoji: pillarForm.emoji, plant: pillarForm.plant, color: pillarForm.color, colorClass: pillarForm.colorClass, bgClass: pillarForm.bgClass, defaultMinutes: pillarForm.defaultMinutes, weeklyTarget: pillarForm.weeklyTarget } : c);
+                        const newSettings = {
+                          ...settings,
+                          categories: updated,
+                          timerDurations: { ...settings.timerDurations, [cat.id]: pillarForm.defaultMinutes },
+                          weeklyTargets: { ...settings.weeklyTargets, [cat.id]: pillarForm.weeklyTarget },
+                        };
+                        setSettings(newSettings);
+                        setEditingPillar(null);
+                      }} className="flex-1" size="sm">Save</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+                    <span className="text-xl">{cat.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{cat.label}</div>
+                      <div className="text-[10px] text-muted">{cat.plant} · {settings.timerDurations[cat.id] || cat.defaultMinutes}m · {settings.weeklyTargets[cat.id] || cat.weeklyTarget}/wk</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {idx > 0 && (
+                        <button onClick={() => {
+                          const cats = [...settings.categories];
+                          [cats[idx - 1], cats[idx]] = [cats[idx], cats[idx - 1]];
+                          setSettings({ ...settings, categories: cats });
+                        }} className="text-xs px-1.5 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-muted">▲</button>
+                      )}
+                      {idx < settings.categories.length - 1 && (
+                        <button onClick={() => {
+                          const cats = [...settings.categories];
+                          [cats[idx], cats[idx + 1]] = [cats[idx + 1], cats[idx]];
+                          setSettings({ ...settings, categories: cats });
+                        }} className="text-xs px-1.5 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-muted">▼</button>
+                      )}
+                      <button onClick={() => {
+                        setEditingPillar(cat.id);
+                        setPillarForm({ label: cat.label, emoji: cat.emoji, plant: cat.plant, color: cat.color, colorClass: cat.colorClass, bgClass: cat.bgClass, defaultMinutes: settings.timerDurations[cat.id] || cat.defaultMinutes, weeklyTarget: settings.weeklyTargets[cat.id] || cat.weeklyTarget });
+                      }} className="text-xs px-1.5 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-muted">✏️</button>
+                      {settings.categories.length > 1 && (
+                        <button onClick={() => {
+                          if (!confirm(`Remove "${cat.label}"? Existing sessions will show as "Unknown".`)) return;
+                          const filtered = settings.categories.filter(c => c.id !== cat.id);
+                          setSettings({ ...settings, categories: filtered });
+                        }} className="text-xs px-1.5 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-muted hover:text-red-500">🗑️</button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add new pillar */}
+          {newPillar ? (
+            <div className="mt-3 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10 p-3 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted">Name</label>
+                <input
+                  type="text"
+                  value={pillarForm.label}
+                  onChange={(e) => setPillarForm({ ...pillarForm, label: e.target.value })}
+                  placeholder="e.g., Music, Journaling..."
+                  autoFocus
+                  className="mt-1 w-full rounded-lg border border-card-border bg-white dark:bg-gray-800 px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted mb-1 block">Plant</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PLANT_PRESETS.map((p) => (
+                    <button
+                      key={p.emoji}
+                      onClick={() => setPillarForm({ ...pillarForm, emoji: p.emoji, plant: p.plant, color: p.color, colorClass: p.colorClass, bgClass: p.bgClass })}
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-all ${
+                        pillarForm.emoji === p.emoji ? "ring-2 ring-blue-400 scale-110 bg-blue-50 dark:bg-blue-900/30" : "bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {p.emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted">Timer (min)</label>
+                  <input type="number" value={pillarForm.defaultMinutes} onChange={(e) => setPillarForm({ ...pillarForm, defaultMinutes: Number(e.target.value) })} min={5} max={120} className="mt-1 w-full rounded-lg border border-card-border bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-center focus:outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted">Weekly target</label>
+                  <input type="number" value={pillarForm.weeklyTarget} onChange={(e) => setPillarForm({ ...pillarForm, weeklyTarget: Number(e.target.value) })} min={0} max={50} className="mt-1 w-full rounded-lg border border-card-border bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-center focus:outline-none focus:border-blue-400" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => { setNewPillar(false); setPillarForm({ label: "", emoji: "🌸", plant: "Cherry Blossom", color: "#f472b6", colorClass: "text-pink-400", bgClass: "bg-pink-400", defaultMinutes: 25, weeklyTarget: 5 }); }} className="flex-1" size="sm">Cancel</Button>
+                <Button onClick={() => {
+                  if (!pillarForm.label.trim()) return;
+                  if (settings.categories.length >= 8) { showToast({ emoji: "⚠️", title: "Maximum 8 pillars", type: "info" }); return; }
+                  const id = pillarForm.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+                  if (settings.categories.some(c => c.id === id)) { showToast({ emoji: "⚠️", title: "A pillar with this name already exists", type: "info" }); return; }
+                  const newCat: Category = { id, label: pillarForm.label.trim(), emoji: pillarForm.emoji, plant: pillarForm.plant, color: pillarForm.color, colorClass: pillarForm.colorClass, bgClass: pillarForm.bgClass, defaultMinutes: pillarForm.defaultMinutes, weeklyTarget: pillarForm.weeklyTarget };
+                  setSettings({
+                    ...settings,
+                    categories: [...settings.categories, newCat],
+                    timerDurations: { ...settings.timerDurations, [id]: pillarForm.defaultMinutes },
+                    weeklyTargets: { ...settings.weeklyTargets, [id]: pillarForm.weeklyTarget },
+                  });
+                  setNewPillar(false);
+                  setPillarForm({ label: "", emoji: "🌸", plant: "Cherry Blossom", color: "#f472b6", colorClass: "text-pink-400", bgClass: "bg-pink-400", defaultMinutes: 25, weeklyTarget: 5 });
+                  showToast({ emoji: pillarForm.emoji, title: `${pillarForm.label} added!`, type: "success" });
+                }} className="flex-1" size="sm">Add Pillar</Button>
+              </div>
+            </div>
+          ) : settings.categories.length < 8 && (
+            <button
+              onClick={() => {
+                setNewPillar(true);
+                setEditingPillar(null);
+                setPillarForm({ label: "", emoji: "🌸", plant: "Cherry Blossom", color: "#f472b6", colorClass: "text-pink-400", bgClass: "bg-pink-400", defaultMinutes: 25, weeklyTarget: 5 });
+              }}
+              className="mt-3 w-full py-2.5 rounded-xl border-2 border-dashed border-card-border text-sm text-muted hover:text-foreground hover:border-green-400 transition-all"
+            >
+              + Add New Pillar
+            </button>
+          )}
+        </Card>
+
         {/* Baby Info */}
         <Card className="animate-fade-in" style={{ animationDelay: "0.11s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">Baby Info</h2>
@@ -153,9 +353,13 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-        </Card>
 
-        {/* Timer Settings */}
+          {/* Language */}
+          <div className="mt-4">
+            <h3 className="text-xs font-medium text-muted mb-2">Language</h3>
+            <LanguageSelector />
+          </div>
+        </Card>
         <Card className="animate-fade-in" style={{ animationDelay: "0.15s" }}>
           <h2 className="text-sm font-semibold text-muted mb-3">Timer</h2>
           <div className="space-y-3">
@@ -218,7 +422,7 @@ export default function SettingsPage() {
                 Timer Duration Per Category
               </label>
               <div className="space-y-2">
-                {CATEGORY_LIST.map((cat) => (
+                {settings.categories.map((cat) => (
                   <div key={cat.id} className="flex items-center gap-3">
                     <span className="text-sm w-5">{cat.emoji}</span>
                     <span className="text-sm flex-1">{cat.label}</span>
@@ -254,7 +458,7 @@ export default function SettingsPage() {
             Weekly Targets
           </h2>
           <div className="space-y-2">
-            {CATEGORY_LIST.map((cat) => (
+            {settings.categories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3">
                 <span className="text-sm w-5">{cat.emoji}</span>
                 <span className="text-sm flex-1">{cat.label}</span>

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CategoryId, Session } from "@/types";
-import { CATEGORIES, CATEGORY_LIST } from "@/lib/constants";
-import { getSessions } from "@/lib/store";
+import { Category, Session } from "@/types";
+import { getSessions, getCategories } from "@/lib/store";
 import { formatMinutes, toLocalDateString } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import {
@@ -20,23 +19,25 @@ import {
 
 export default function TrendsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setSessions(getSessions());
+    setCategories(getCategories());
   }, []);
 
   // Build daily data for last 30 days
   const dailyData = useMemo(() => {
-    const days: { date: string; label: string; total: number; categories: Record<CategoryId, number>; minutes: number }[] = [];
+    const days: { date: string; label: string; total: number; categories: Record<string, number>; minutes: number }[] = [];
     const today = new Date();
     for (let i = 29; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const dateStr = toLocalDateString(d);
       const daySessions = sessions.filter((s) => s.completed_at && toLocalDateString(new Date(s.completed_at)) === dateStr);
-      const cats: Record<string, number> = { coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0 };
+      const cats: Record<string, number> = Object.fromEntries(categories.map(c => [c.id, 0]));
       let totalMinutes = 0;
       for (const s of daySessions) {
         cats[s.category] = (cats[s.category] || 0) + 1;
@@ -46,12 +47,12 @@ export default function TrendsPage() {
         date: dateStr,
         label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         total: daySessions.length,
-        categories: cats as Record<CategoryId, number>,
+        categories: cats as Record<string, number>,
         minutes: totalMinutes,
       });
     }
     return days;
-  }, [sessions]);
+  }, [sessions, categories]);
 
   // Day of week patterns
   const dayOfWeekData = useMemo(() => {
@@ -315,7 +316,7 @@ export default function TrendsPage() {
             Category Distribution (30 Days)
           </h2>
           {(() => {
-            const catTotals = CATEGORY_LIST.map((cat) => ({
+            const catTotals = categories.map((cat) => ({
               ...cat,
               total: dailyData.reduce((sum, d) => sum + d.categories[cat.id], 0),
             }));

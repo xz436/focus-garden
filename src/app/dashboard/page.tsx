@@ -2,10 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { CategoryId, Session } from "@/types";
+import { Category, Session } from "@/types";
 import {
-  CATEGORIES,
-  CATEGORY_LIST,
   getPlantEmoji,
   getPlantStage,
   getDailyQuote,
@@ -21,6 +19,9 @@ import {
   autoSnapshotPreviousWeek,
   addSession,
   getDailyPlan,
+  getCategories,
+  getCategoryMap,
+  generateDailyReport,
 } from "@/lib/store";
 import { getGreeting, formatMinutes, getToday } from "@/lib/utils";
 import Card from "@/components/ui/Card";
@@ -32,14 +33,14 @@ import SessionEditModal from "@/components/ui/SessionEditModal";
 
 export default function DashboardPage() {
   const [todaySessions, setTodaySessions] = useState<Session[]>([]);
-  const [weekCounts, setWeekCounts] = useState<Record<CategoryId, number>>({
-    coding: 0, ai: 0, baby: 0, fitness: 0, reading: 0, spiritual: 0,
-  });
+  const [weekCounts, setWeekCounts] = useState<Record<string, number>>({});
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
   const [solvedCount, setSolvedCount] = useState(0);
   const [streakDays, setStreakDays] = useState(0);
   const [displayName, setDisplayName] = useState("Xiaochan");
   const [mounted, setMounted] = useState(false);
-  const [todayPlan, setTodayPlan] = useState<{ intentions: string; categoryGoals: Record<CategoryId, number> } | null>(null);
+  const [todayPlan, setTodayPlan] = useState<{ intentions: string; categoryGoals: Record<string, number> } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickMinutes, setQuickMinutes] = useState(25);
@@ -48,6 +49,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setMounted(true);
+    const cats = getCategories();
+    setCategories(cats);
+    setCategoryMap(getCategoryMap());
     autoSnapshotPreviousWeek();
     loadData();
     const newlyUnlocked = checkAndUnlockAchievements();
@@ -89,7 +93,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleQuickAdd = (catId: CategoryId) => {
+  const handleQuickAdd = (catId: string) => {
     addSession({
       category: catId,
       duration_minutes: quickMinutes,
@@ -100,9 +104,10 @@ export default function DashboardPage() {
     setQuickNotes("");
     setShowQuickAdd(false);
     loadData();
+    const cat = categoryMap[catId];
     showToast({
-      emoji: CATEGORIES[catId].emoji,
-      title: `${CATEGORIES[catId].label} session logged!`,
+      emoji: cat?.emoji || "🌱",
+      title: `${cat?.label || catId} session logged!`,
       description: `${quickMinutes} minutes`,
       type: "success",
     });
@@ -122,21 +127,72 @@ export default function DashboardPage() {
     }, 300);
   };
 
+  const handleShareProgress = async () => {
+    const text = generateDailyReport();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Focus Garden - Daily Progress", text });
+        return;
+      } catch (e) {
+        if ((e as DOMException).name === "AbortError") return;
+      }
+    }
+    await navigator.clipboard.writeText(text);
+    showToast({ emoji: "📋", title: "Progress copied!", description: "Paste it anywhere to share", type: "success" });
+  };
+
+  const handleShareLink = async () => {
+    try {
+      const snapshotData = {
+        garden: Object.fromEntries(
+          categories.map((cat) => [
+            cat.id,
+            { emoji: cat.emoji, label: cat.label, sessions: weekCounts[cat.id] || 0, color: cat.color },
+          ])
+        ),
+        streak: streakDays,
+        totalSessions: todaySessions.length,
+        totalMinutes: todaySessions.reduce((s, x) => s + x.duration_minutes, 0),
+        weekSessions: Object.values(weekCounts).reduce((a, b) => a + b, 0),
+        weekMinutes: todaySessions.reduce((s, x) => s + x.duration_minutes, 0),
+        blind75Solved: solvedCount,
+      };
+
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName, snapshotData }),
+      });
+
+      if (!res.ok) {
+        showToast({ emoji: "❌", title: "Failed to create share link", type: "info" });
+        return;
+      }
+
+      const { shareId } = await res.json();
+      const shareUrl = `${window.location.origin}/share/${shareId}`;
+      await navigator.clipboard.writeText(shareUrl);
+      showToast({ emoji: "🔗", title: "Share link copied!", description: "Anyone can view your progress", type: "success" });
+    } catch {
+      showToast({ emoji: "❌", title: "Failed to create share link", type: "info" });
+    }
+  };
+
   // Most neglected category this week
   const mostNeglected = useMemo(() => {
-    if (!mounted) return null;
+    if (!mounted || categories.length === 0) return null;
     const settings = getSettings();
-    let lowest = CATEGORY_LIST[0];
+    let lowest = categories[0];
     let lowestPct = 1;
-    for (const cat of CATEGORY_LIST) {
-      const pct = weekCounts[cat.id] / settings.weeklyTargets[cat.id];
+    for (const cat of categories) {
+      const pct = (weekCounts[cat.id] || 0) / (settings.weeklyTargets[cat.id] || 1);
       if (pct < lowestPct) {
         lowestPct = pct;
         lowest = cat;
       }
     }
-    return { cat: lowest, count: weekCounts[lowest.id], target: settings.weeklyTargets[lowest.id] };
-  }, [mounted, weekCounts]);
+    return { cat: lowest, count: weekCounts[lowest.id] || 0, target: settings.weeklyTargets[lowest.id] || 1 };
+  }, [mounted, weekCounts, categories]);
 
   if (!mounted) {
     return (
@@ -156,7 +212,7 @@ export default function DashboardPage() {
     todayCategoryCounts[s.category] = (todayCategoryCounts[s.category] || 0) + 1;
   }
 
-  const missingToday = CATEGORY_LIST.filter(
+  const missingToday = categories.filter(
     (cat) => !todayCategoryCounts[cat.id] && getSettings().weeklyTargets[cat.id] >= 7
   );
 
@@ -172,9 +228,33 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-lg space-y-4">
         {/* Header */}
         <div className="animate-fade-in">
-          <h1 className="text-2xl font-bold">
-            {getGreeting()}, {displayName}!
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">
+              {getGreeting()}, {displayName}!
+            </h1>
+            {todaySessions.length > 0 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleShareProgress}
+                  className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                  title="Share as text"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleShareLink}
+                  className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                  title="Create shareable link"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-sm text-muted">
             {dayNames[today.getDay()]}, {monthNames[today.getMonth()]} {today.getDate()}
             {streakDays > 0 && ` · ${streakDays} day streak 🔥`}
@@ -209,7 +289,7 @@ export default function DashboardPage() {
           <Card className="animate-fade-in bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-100 dark:border-green-800" style={{ animationDelay: "0.05s" }}>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-green-700 dark:text-green-400">Today&apos;s Plan</h2>
-              <Link href="/plan" className="text-[10px] text-green-600 dark:text-green-400 hover:underline">
+              <Link href="/weekly-plan" className="text-[10px] text-green-600 dark:text-green-400 hover:underline">
                 Edit →
               </Link>
             </div>
@@ -230,9 +310,9 @@ export default function DashboardPage() {
 
             {/* Top category goals with progress */}
             {(() => {
-              const topGoals = CATEGORY_LIST
-                .filter((cat) => todayPlan!.categoryGoals[cat.id] > 0)
-                .sort((a, b) => todayPlan!.categoryGoals[b.id] - todayPlan!.categoryGoals[a.id])
+              const topGoals = categories
+                .filter((cat) => (todayPlan!.categoryGoals[cat.id] || 0) > 0)
+                .sort((a, b) => (todayPlan!.categoryGoals[b.id] || 0) - (todayPlan!.categoryGoals[a.id] || 0))
                 .slice(0, 3);
               if (topGoals.length === 0) return null;
               return (
@@ -299,7 +379,7 @@ export default function DashboardPage() {
                         ⏱️ Start a Focus Session
                       </button>
                     </Link>
-                    <Link href="/plan" className="flex-1">
+                    <Link href="/weekly-plan" className="flex-1">
                       <button className="w-full py-3 rounded-xl border border-card-border font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-all active:scale-95">
                         📝 Plan Your Day
                       </button>
@@ -323,7 +403,7 @@ export default function DashboardPage() {
                     </Link>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="flex-1 grid grid-cols-3 gap-3">
+                    <div className="flex-1 grid grid-cols-4 gap-3">
                       <div className="text-center">
                         <div className="text-2xl font-bold">{todaySessions.length}</div>
                         <div className="text-[10px] text-muted">sessions</div>
@@ -333,107 +413,50 @@ export default function DashboardPage() {
                         <div className="text-[10px] text-muted">focus time</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold">{Object.keys(todayCategoryCounts).length}/6</div>
+                        <div className="text-2xl font-bold">{Object.keys(todayCategoryCounts).length}/{categories.length}</div>
                         <div className="text-[10px] text-muted">categories</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold">{streakDays}🔥</div>
+                        <div className="text-[10px] text-muted">streak</div>
                       </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 mt-3">
-                    {CATEGORY_LIST.map((cat) => {
+                    {categories.map((cat) => {
                       const count = todayCategoryCounts[cat.id] || 0;
                       return count > 0 ? (
                         <span
                           key={cat.id}
                           className="text-[10px] px-2 py-0.5 rounded-full font-medium"
                           style={{ color: cat.color, backgroundColor: `${cat.color}15` }}
+                          title={`${cat.label}: ${count} session${count > 1 ? "s" : ""}`}
                         >
-                          {cat.emoji} {count}
+                          {cat.emoji} {cat.label.split(" ")[0]} {count}
                         </span>
                       ) : null;
                     })}
                   </div>
+                  {missingToday.length > 0 && missingToday.length < categories.length && (
+                    <p className="text-[10px] text-muted mt-2">
+                      Still to do: {missingToday.map((c) => c.emoji).join(" ")}
+                    </p>
+                  )}
                 </div>
               )}
             </Card>
           </>
         )}
 
-        {/* Today's Stats */}
+        {/* Quick Actions — Primary entry points */}
         <div className="grid grid-cols-3 gap-3 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-          <Card className="text-center">
-            <div className="text-2xl font-bold">{todaySessions.length}</div>
-            <div className="text-[10px] text-muted">Sessions Today</div>
-          </Card>
-          <Card className="text-center">
-            <div className="text-2xl font-bold">{formatMinutes(todayTotalMinutes)}</div>
-            <div className="text-[10px] text-muted">Focus Today</div>
-          </Card>
-          <Card className="text-center">
-            <div className="text-2xl font-bold">{streakDays}🔥</div>
-            <div className="text-[10px] text-muted">Day Streak</div>
-          </Card>
-        </div>
-
-        {/* This Week — Merged Garden + Targets */}
-        <Card className="animate-fade-in" style={{ animationDelay: "0.15s" }}>
-          <h2 className="text-sm font-semibold text-muted mb-3">This Week</h2>
-
-          {/* Garden row */}
-          <div className="flex justify-around py-3 mb-4 rounded-xl bg-gradient-to-b from-sky-50 to-green-50 dark:from-sky-900/20 dark:to-green-900/20">
-            {CATEGORY_LIST.map((cat) => {
-              const sessions = weekCounts[cat.id];
-              const stage = getPlantStage(sessions);
-              return (
-                <div key={cat.id} className="flex flex-col items-center gap-0.5">
-                  <div
-                    className={`${stage.size} ${
-                      sessions > 0 ? "animate-sway" : "opacity-40"
-                    }`}
-                  >
-                    {getPlantEmoji(cat.id, sessions)}
-                  </div>
-                  <div className="text-[9px] text-muted">{cat.label.split(" ")[0]}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Target progress bars */}
-          <div className="space-y-2.5">
-            {CATEGORY_LIST.map((cat) => {
-              const target = settings.weeklyTargets[cat.id];
-              return (
-                <div key={cat.id}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs">
-                      {cat.emoji} {cat.label}
-                    </span>
-                    <span className="text-[10px] text-muted">
-                      {weekCounts[cat.id]}/{target}
-                      {weekCounts[cat.id] >= target && " ✅"}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    value={weekCounts[cat.id]}
-                    max={target}
-                    color={weekCounts[cat.id] >= target ? "#22c55e" : cat.color}
-                    size="sm"
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-3 animate-fade-in" style={{ animationDelay: "0.2s" }}>
           <Link href="/timer">
             <Card className="text-center hover:scale-105 transition-transform cursor-pointer">
               <span className="text-2xl">⏱️</span>
               <p className="text-xs font-medium mt-1">Start Timer</p>
             </Card>
           </Link>
-          <Link href="/plan">
+          <Link href="/weekly-plan">
             <Card className="text-center hover:scale-105 transition-transform cursor-pointer">
               <span className="text-2xl">📝</span>
               <p className="text-xs font-medium mt-1">Plan Day</p>
@@ -443,10 +466,46 @@ export default function DashboardPage() {
             <Card className="text-center hover:scale-105 transition-transform cursor-pointer">
               <span className="text-2xl">🌷</span>
               <p className="text-xs font-medium mt-1">Baby Time</p>
-              <p className="text-[8px] text-muted">(activities)</p>
             </Card>
           </Link>
         </div>
+
+        {/* This Week — Compact Garden */}
+        <Card className="animate-fade-in" style={{ animationDelay: "0.15s" }}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-muted">This Week</h2>
+            <Link href="/review" className="text-[10px] text-muted hover:text-foreground">
+              Details →
+            </Link>
+          </div>
+
+          {/* Garden row */}
+          <div className="flex justify-around py-3 rounded-xl bg-gradient-to-b from-sky-50 to-green-50 dark:from-sky-900/20 dark:to-green-900/20">
+            {categories.map((cat) => {
+              const sessions = weekCounts[cat.id] || 0;
+              const stage = getPlantStage(sessions);
+              return (
+                <div key={cat.id} className="flex flex-col items-center gap-0.5">
+                  <div
+                    className={`${stage.size} ${
+                      sessions > 0 ? "animate-sway" : "opacity-40"
+                    }`}
+                  >
+                    {getPlantEmoji(cat.emoji, sessions)}
+                  </div>
+                  <div className="text-[9px] text-muted">{cat.label.split(" ")[0]}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* One-line summary */}
+          <p className="text-xs text-muted text-center mt-2">
+            {Object.values(weekCounts).reduce((a, b) => a + b, 0)} sessions · {formatMinutes(
+              Object.values(weekCounts).reduce((a, b) => a + b, 0) * 25
+            )} focus time
+          </p>
+        </Card>
 
         {/* Today's Sessions */}
         <Card className="animate-fade-in" style={{ animationDelay: "0.25s" }}>
@@ -460,7 +519,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {todaySessions.map((session) => {
-                const cat = CATEGORIES[session.category];
+                const cat = categoryMap[session.category];
                 const time = new Date(session.completed_at!);
                 return (
                   <div
@@ -514,54 +573,7 @@ export default function DashboardPage() {
           )}
         </Card>
 
-        {/* Gentle Reminders — Actionable */}
-        {missingToday.length > 0 && (
-          <Card className="animate-fade-in border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20" style={{ animationDelay: "0.3s" }}>
-            <h2 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-2">
-              Gentle Reminders
-            </h2>
-            <div className="space-y-1.5">
-              {missingToday.map((cat) => (
-                <Link key={cat.id} href="/timer">
-                  <div className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-amber-100 dark:hover:bg-amber-800/30 transition-colors cursor-pointer">
-                    <span className="text-sm text-amber-600 dark:text-amber-400">
-                      {cat.emoji} {cat.label}
-                    </span>
-                    <span className="text-xs text-amber-500 dark:text-amber-400">
-                      Start →
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
 
-        {/* Monthly Activity */}
-        <Card className="animate-fade-in" style={{ animationDelay: "0.35s" }}>
-          <h2 className="text-sm font-semibold text-muted mb-2">Monthly Activity</h2>
-          <MonthCalendar />
-        </Card>
-
-        {/* Blind 75 Progress Mini */}
-        <Link href="/blind75">
-          <Card className="animate-fade-in hover:scale-[1.02] transition-transform" style={{ animationDelay: "0.4s" }}>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-muted">
-                💻 Blind 75 Progress
-              </h2>
-              <span className="text-xs text-muted">
-                {solvedCount}/75 ({Math.round((solvedCount / 75) * 100)}%)
-              </span>
-            </div>
-            <ProgressBar
-              value={solvedCount}
-              max={75}
-              color="#22c55e"
-              size="md"
-            />
-          </Card>
-        </Link>
       </div>
 
       {/* Quick Add FAB */}
@@ -617,7 +629,7 @@ export default function DashboardPage() {
 
             {/* Category buttons */}
             <div className="grid grid-cols-3 gap-2">
-              {CATEGORY_LIST.map((cat) => (
+              {categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => handleQuickAdd(cat.id)}
