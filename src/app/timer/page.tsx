@@ -246,6 +246,7 @@ function TimerPageInner() {
   const startTimeRef = useRef<string>("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completingRef = useRef(false);
+  const completeSessionRef = useRef<() => void>(() => {});
   const originalTitleRef = useRef<string>("");
 
   // Persist active timer to localStorage so it survives page navigation
@@ -563,6 +564,11 @@ function TimerPageInner() {
     });
   };
 
+  // Keep completeSessionRef in sync
+  useEffect(() => {
+    completeSessionRef.current = completeSession;
+  }, [completeSession]);
+
   const resetTimer = () => {
     setTimerState("idle");
     const minutes = getTimerDuration(category);
@@ -580,7 +586,7 @@ function TimerPageInner() {
           if (t <= 1) {
             if (intervalRef.current) clearInterval(intervalRef.current);
             if (timerState === "running") {
-              completeSession();
+              completeSessionRef.current();
             } else {
               // Break ended
               sendNotification(
@@ -604,7 +610,7 @@ function TimerPageInner() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [timerState, completeSession, category, getTimerDuration]);
+  }, [timerState, category, getTimerDuration]);
 
   // Periodically save timer state so navigation away preserves accurate timeLeft
   useEffect(() => {
@@ -1266,31 +1272,35 @@ function TimerPageInner() {
               {todayTasks.map((task, idx) => (
                 <div
                   key={idx}
-                  className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all ${
-                    task.type === "category" && !task.done
-                      ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    if (task.type === "category" && task.catId && timerState === "idle") {
-                      setCategory(task.catId);
-                    }
-                  }}
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  <div
-                    className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                  <button
+                    onClick={() => {
+                      setTodayTasks((prev) =>
+                        prev.map((t, i) => (i === idx ? { ...t, done: !t.done } : t))
+                      );
+                    }}
+                    className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
                       task.done
                         ? "bg-green-500 border-green-500 text-white"
-                        : "border-card-border"
+                        : "border-card-border hover:border-green-400"
                     }`}
                   >
-                    {task.done && <span className="text-[8px]">✓</span>}
-                  </div>
-                  <span className={`text-sm flex-1 ${task.done ? "line-through text-muted" : ""}`}>
+                    {task.done && <span className="text-[10px]">✓</span>}
+                  </button>
+                  <span
+                    className={`text-sm flex-1 ${task.done ? "line-through text-muted" : "cursor-pointer"}`}
+                    onClick={() => {
+                      if (task.type === "category" && task.catId && timerState === "idle") {
+                        setCategory(task.catId);
+                        showToast({ emoji: categoryMap[task.catId]?.emoji || "🌱", title: `Switched to ${categoryMap[task.catId]?.label}`, type: "info" });
+                      }
+                    }}
+                  >
                     {task.text}
                   </span>
                   {task.type === "category" && task.catId && (
-                    <span className="text-[10px] text-muted">
+                    <span className={`text-[10px] ${(todayCatDone[task.catId] || 0) >= ((getDailyPlanWithWeekly(getToday())?.categoryGoals[task.catId]) || 1) ? "text-green-600 font-medium" : "text-muted"}`}>
                       {todayCatDone[task.catId] || 0}/{(getDailyPlanWithWeekly(getToday())?.categoryGoals[task.catId]) || 0}
                     </span>
                   )}
