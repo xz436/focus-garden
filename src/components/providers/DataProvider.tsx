@@ -63,12 +63,20 @@ export default function DataProvider({
       const hasLocalData = localSessions.length > 0;
 
       if (hasRemoteData) {
-        // Remote has data — hydrate localStorage from Supabase
+        // Remote has data — merge with localStorage (deduplicate by ID)
         if (remote.sessions.length > 0) {
-          localStorage.setItem("fg_sessions", JSON.stringify(remote.sessions));
+          const localSess = getSessions();
+          const mergedMap = new Map<string, typeof localSess[0]>();
+          for (const s of localSess) mergedMap.set(s.id, s);
+          for (const s of remote.sessions) mergedMap.set(s.id, s);
+          localStorage.setItem("fg_sessions", JSON.stringify([...mergedMap.values()]));
         }
         if (remote.problems.length > 0) {
-          localStorage.setItem("fg_problems", JSON.stringify(remote.problems));
+          const localProbs = getProblems();
+          const mergedMap = new Map<string, typeof localProbs[0]>();
+          for (const p of localProbs) mergedMap.set(p.id, p);
+          for (const p of remote.problems) mergedMap.set(p.id, p);
+          localStorage.setItem("fg_problems", JSON.stringify([...mergedMap.values()]));
           localStorage.setItem("fg_initialized", "true");
         }
         if (Object.keys(remote.dailyPlans).length > 0) {

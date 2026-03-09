@@ -45,7 +45,14 @@ function setStorage<T>(key: string, data: T) {
 
 // Sessions
 export function getSessions(): Session[] {
-  return getStorage<Session[]>(STORAGE_KEYS.sessions, []);
+  const sessions = getStorage<Session[]>(STORAGE_KEYS.sessions, []);
+  // Deduplicate by ID (safety net for sync race conditions)
+  const seen = new Set<string>();
+  return sessions.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
 }
 
 export function addSession(session: Omit<Session, "id" | "user_id" | "created_at">): Session {
