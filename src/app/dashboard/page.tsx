@@ -18,7 +18,8 @@ import {
   checkAndUnlockAchievements,
   autoSnapshotPreviousWeek,
   addSession,
-  getDailyPlan,
+  getDailyPlanWithWeekly,
+  DailyPlanLocal,
   getCategories,
   getCategoryMap,
   generateDailyReport,
@@ -75,7 +76,7 @@ export default function DashboardPage() {
     setSolvedCount(problems.filter((p) => p.status === "solved").length);
     setStreakDays(getStreakData().current);
     setDisplayName(getSettings().displayName);
-    const plan = getDailyPlan(getToday());
+    const plan = getDailyPlanWithWeekly(getToday());
     if (plan && (plan.intentions || Object.values(plan.categoryGoals).some((v) => v > 0))) {
       setTodayPlan({ intentions: plan.intentions, categoryGoals: plan.categoryGoals });
     }

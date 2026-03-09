@@ -3,6 +3,7 @@
 import { Session, Blind75Problem, ProblemStatus, Category } from "@/types";
 import { BLIND75_PROBLEMS, DEFAULT_CATEGORIES } from "@/lib/constants";
 import { getWeekStart, getToday, toLocalDateString } from "@/lib/utils";
+import * as supabaseStore from "@/lib/supabase-store";
 
 const STORAGE_KEYS = {
   sessions: "fg_sessions",
@@ -57,6 +58,10 @@ export function addSession(session: Omit<Session, "id" | "user_id" | "created_at
   };
   sessions.push(newSession);
   setStorage(STORAGE_KEYS.sessions, sessions);
+  // Sync to Supabase
+  if (currentUserId !== "local") {
+    supabaseStore.pushSession(newSession).catch(console.error);
+  }
   return newSession;
 }
 
@@ -137,6 +142,9 @@ export function updateProblem(
     problems[idx].solved_at = new Date().toISOString();
   }
   setStorage(STORAGE_KEYS.problems, problems);
+  if (currentUserId !== "local") {
+    supabaseStore.updateProblemRemote(id, problems[idx]).catch(console.error);
+  }
   return problems[idx];
 }
 
@@ -188,6 +196,9 @@ export function getWeekCategorySessionsForWeek(weekStartDate: string): Record<st
 export function deleteSession(id: string) {
   const sessions = getSessions().filter((s) => s.id !== id);
   setStorage(STORAGE_KEYS.sessions, sessions);
+  if (currentUserId !== "local") {
+    supabaseStore.removeSession(id).catch(console.error);
+  }
 }
 
 // Daily Plans
@@ -208,6 +219,9 @@ export function saveDailyPlan(plan: DailyPlanLocal) {
   const plans = getStorage<Record<string, DailyPlanLocal>>(STORAGE_KEYS.plans, {});
   plans[plan.date] = plan;
   setStorage(STORAGE_KEYS.plans, plans);
+  if (currentUserId !== "local") {
+    supabaseStore.pushDailyPlan(currentUserId, plan).catch(console.error);
+  }
 }
 
 // Get daily plan with weekly plan tasks merged in
@@ -217,24 +231,41 @@ export function getDailyPlanWithWeekly(date: string): DailyPlanLocal | null {
   const weeklyPlan = getWeeklyPlan(weekStart);
   const weeklyDay = weeklyPlan?.days?.[date];
 
-  if (!dailyPlan && !weeklyDay) return null;
+  if (!dailyPlan && !weeklyDay && !weeklyPlan) return null;
 
-  const weeklyIntentions = weeklyDay?.tasks?.filter(Boolean).join("\n") || "";
+  const weeklyIntentions = weeklyDay?.tasks?.filter((t) => typeof t === 'object' ? t.text : t).map((t) => typeof t === 'object' ? t.text : t).join("\n") || "";
+
+  // Calculate daily category goals from weekly targets
   const weeklyGoals: Record<string, number> = {};
-  if (weeklyDay?.categoryFocus) {
-    for (const catId of weeklyDay.categoryFocus) {
-      weeklyGoals[catId] = 1;
+  if (weeklyPlan?.categoryTargets) {
+    for (const [catId, weeklyTarget] of Object.entries(weeklyPlan.categoryTargets)) {
+      if (weeklyTarget > 0) {
+        // If this category is a focus for this day, give it a proportional daily target
+        const isFocusDay = weeklyDay?.categoryFocus?.includes(catId);
+        if (isFocusDay) {
+          // Count how many days this category is focused on
+          const focusDays = Object.values(weeklyPlan.days).filter(
+            (d) => d.categoryFocus?.includes(catId)
+          ).length;
+          weeklyGoals[catId] = focusDays > 0 ? Math.ceil(weeklyTarget / focusDays) : Math.ceil(weeklyTarget / 7);
+        } else {
+          // Not a focus day but category has a target — give a base daily amount
+          weeklyGoals[catId] = Math.ceil(weeklyTarget / 7);
+        }
+      }
     }
   }
 
   if (dailyPlan) {
-    // Daily plan exists — merge weekly tasks if daily intentions are empty
+    // Daily plan exists — merge weekly data
+    // Weekly targets always take priority for category goals
+    const mergedGoals = Object.keys(weeklyGoals).length > 0
+      ? { ...dailyPlan.categoryGoals, ...weeklyGoals }
+      : dailyPlan.categoryGoals;
     return {
       ...dailyPlan,
       intentions: dailyPlan.intentions || weeklyIntentions,
-      categoryGoals: Object.values(dailyPlan.categoryGoals).some((v) => v > 0)
-        ? dailyPlan.categoryGoals
-        : { ...weeklyGoals, ...dailyPlan.categoryGoals },
+      categoryGoals: mergedGoals,
     };
   }
 
@@ -272,6 +303,9 @@ export function saveBabyLog(log: BabyDailyLog) {
   const logs = getStorage<Record<string, BabyDailyLog>>(STORAGE_KEYS.babyLogs, {});
   logs[log.date] = log;
   setStorage(STORAGE_KEYS.babyLogs, logs);
+  if (currentUserId !== "local") {
+    supabaseStore.pushBabyLog(currentUserId, log).catch(console.error);
+  }
 }
 
 // Settings
@@ -311,6 +345,9 @@ export function getSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings) {
   setStorage(STORAGE_KEYS.settings, settings);
+  if (currentUserId !== "local") {
+    supabaseStore.pushSettings(currentUserId, settings).catch(console.error);
+  }
 }
 
 // Dynamic category helpers
@@ -683,6 +720,12 @@ export function checkAndUnlockAchievements(): Achievement[] {
 
   if (newlyUnlocked.length > 0) {
     setStorage(STORAGE_KEYS.achievements, achievements);
+    if (currentUserId !== "local") {
+      supabaseStore.pushAchievements(
+        currentUserId,
+        achievements.filter((a) => a.unlockedAt).map((a) => ({ id: a.id, unlockedAt: a.unlockedAt }))
+      ).catch(console.error);
+    }
   }
 
   return newlyUnlocked;
@@ -695,6 +738,9 @@ export function editSession(id: string, updates: Partial<Pick<Session, "duration
   if (idx === -1) return null;
   sessions[idx] = { ...sessions[idx], ...updates };
   setStorage(STORAGE_KEYS.sessions, sessions);
+  if (currentUserId !== "local") {
+    supabaseStore.updateSession(id, sessions[idx]).catch(console.error);
+  }
   return sessions[idx];
 }
 
@@ -768,6 +814,11 @@ export interface WeeklyPlanSection {
   content: string;
 }
 
+export interface WeeklyPlanTask {
+  text: string;
+  done: boolean;
+}
+
 export interface WeeklyPlanLocal {
   weekStart: string;
   overallGoals: string;
@@ -776,7 +827,7 @@ export interface WeeklyPlanLocal {
   days: Record<string, {
     goals: string;
     categoryFocus: string[];
-    tasks: string[];
+    tasks: WeeklyPlanTask[];
     reflection: string;
   }>;
   familyMeetingNotes: string;
@@ -793,6 +844,9 @@ export function saveWeeklyPlan(plan: WeeklyPlanLocal) {
   const plans = getStorage<Record<string, WeeklyPlanLocal>>(STORAGE_KEYS.weeklyPlans, {});
   plans[plan.weekStart] = { ...plan, updatedAt: new Date().toISOString() };
   setStorage(STORAGE_KEYS.weeklyPlans, plans);
+  if (currentUserId !== "local") {
+    supabaseStore.pushWeeklyPlan(currentUserId, plan).catch(console.error);
+  }
 }
 
 export function getAllWeeklyPlans(): Record<string, WeeklyPlanLocal> {

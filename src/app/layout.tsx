@@ -7,6 +7,7 @@ import Confetti from "@/components/ui/Confetti";
 import ThemeProvider from "@/components/ui/ThemeProvider";
 import AuthProvider from "@/components/providers/AuthProvider";
 import LanguageProvider from "@/components/providers/LanguageProvider";
+import DataProvider from "@/components/providers/DataProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,10 +56,12 @@ export default function RootLayout({
         <ThemeProvider>
           <LanguageProvider>
             <AuthProvider>
-              {children}
-              <Confetti />
-              <ToastContainer />
-              <BottomNav />
+              <DataProvider>
+                {children}
+                <Confetti />
+                <ToastContainer />
+                <BottomNav />
+              </DataProvider>
             </AuthProvider>
           </LanguageProvider>
         </ThemeProvider>

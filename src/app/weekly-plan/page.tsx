@@ -8,6 +8,7 @@ import {
   saveWeeklyPlan,
   WeeklyPlanLocal,
   WeeklyPlanSection,
+  WeeklyPlanTask,
   getSessions,
   getSettings,
   getCategories,
@@ -72,7 +73,7 @@ const DAY_PATTERNS: Record<string, number[]> = {
 
 interface GeneratedPlan {
   targets: Record<string, number>;
-  dayPlan: Record<string, { tasks: string[]; categoryFocus: string[]; reflection: string }>;
+  dayPlan: Record<string, { tasks: WeeklyPlanTask[]; categoryFocus: string[]; reflection: string }>;
 }
 
 // Match a single line to a category (returns category id or null)
@@ -163,7 +164,7 @@ function generatePlanFromSections(
   }
 
   // 2. Generate day-by-day plan
-  const dayPlan: Record<string, { tasks: string[]; categoryFocus: string[]; reflection: string }> = {};
+  const dayPlan: Record<string, { tasks: WeeklyPlanTask[]; categoryFocus: string[]; reflection: string }> = {};
   for (const day of weekDays) {
     dayPlan[day] = { tasks: [], categoryFocus: [], reflection: "" };
   }
@@ -210,7 +211,7 @@ function generatePlanFromSections(
             const dayKey = `${weekDays[idx]}:${taskKey}`;
             if (weekDays[idx] && !seenTasks.has(dayKey)) {
               seenTasks.add(dayKey);
-              dayPlan[weekDays[idx]].tasks.push(cleanTask);
+              dayPlan[weekDays[idx]].tasks.push({ text: cleanTask, done: false });
             }
           }
         }
@@ -259,7 +260,7 @@ export default function WeeklyPlanPage() {
   const [sections, setSections] = useState<WeeklyPlanSection[]>(DEFAULT_SECTIONS);
   const [familyMeetingNotes, setFamilyMeetingNotes] = useState("");
   const [categoryTargets, setCategoryTargets] = useState<Record<string, number>>({});
-  const [days, setDays] = useState<Record<string, { goals: string; categoryFocus: string[]; tasks: string[]; reflection: string }>>({});
+  const [days, setDays] = useState<Record<string, { goals: string; categoryFocus: string[]; tasks: WeeklyPlanTask[]; reflection: string }>>({});
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -268,7 +269,7 @@ export default function WeeklyPlanPage() {
   const [planGenerated, setPlanGenerated] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewTargets, setPreviewTargets] = useState<Record<string, number>>({});
-  const [previewDayPlan, setPreviewDayPlan] = useState<Record<string, { tasks: string[]; categoryFocus: string[]; reflection: string }>>({});
+  const [previewDayPlan, setPreviewDayPlan] = useState<Record<string, { tasks: WeeklyPlanTask[]; categoryFocus: string[]; reflection: string }>>({});
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [addingSection, setAddingSection] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -301,13 +302,18 @@ export default function WeeklyPlanPage() {
       setFamilyMeetingNotes(existing.familyMeetingNotes);
       setCategoryTargets(existing.categoryTargets);
       setSections(existing.sections && existing.sections.length > 0 ? existing.sections : DEFAULT_SECTIONS);
-      const loadedDays: Record<string, { goals: string; categoryFocus: string[]; tasks: string[]; reflection: string }> = {};
+      const loadedDays: Record<string, { goals: string; categoryFocus: string[]; tasks: WeeklyPlanTask[]; reflection: string }> = {};
       for (const day of getWeekDays(weekStart)) {
         const d = existing.days?.[day];
+        // Backward compatibility: migrate string[] tasks to {text, done}[]
+        const rawTasks = d?.tasks || [];
+        const tasks: WeeklyPlanTask[] = rawTasks.map((t: WeeklyPlanTask | string) =>
+          typeof t === 'string' ? { text: t, done: false } : t
+        );
         loadedDays[day] = {
           goals: d?.goals || "",
           categoryFocus: d?.categoryFocus || [],
-          tasks: d?.tasks || [],
+          tasks,
           reflection: d?.reflection || "",
         };
       }
@@ -319,7 +325,7 @@ export default function WeeklyPlanPage() {
       setCategoryTargets(
         Object.fromEntries(cats.map((c) => [c.id, settings.weeklyTargets[c.id] || c.weeklyTarget]))
       );
-      const emptyDays: Record<string, { goals: string; categoryFocus: string[]; tasks: string[]; reflection: string }> = {};
+      const emptyDays: Record<string, { goals: string; categoryFocus: string[]; tasks: WeeklyPlanTask[]; reflection: string }> = {};
       for (const day of getWeekDays(weekStart)) {
         emptyDays[day] = { goals: "", categoryFocus: [], tasks: [], reflection: "" };
       }
@@ -335,7 +341,7 @@ export default function WeeklyPlanPage() {
     const result = generatePlanFromSections(sections, overallGoals, categories, weekDays);
     setPreviewTargets({ ...categoryTargets, ...result.targets });
     // Preserve existing reflections in the preview
-    const previewDays: Record<string, { tasks: string[]; categoryFocus: string[]; reflection: string }> = {};
+    const previewDays: Record<string, { tasks: WeeklyPlanTask[]; categoryFocus: string[]; reflection: string }> = {};
     for (const [day, generated] of Object.entries(result.dayPlan)) {
       previewDays[day] = {
         ...generated,
@@ -456,7 +462,7 @@ export default function WeeklyPlanPage() {
   const addTask = (day: string) => {
     setDays((prev) => {
       const dayData = prev[day] || { goals: "", categoryFocus: [], tasks: [], reflection: "" };
-      return { ...prev, [day]: { ...dayData, tasks: [...dayData.tasks, ""] } };
+      return { ...prev, [day]: { ...dayData, tasks: [...dayData.tasks, { text: "", done: false }] } };
     });
   };
 
@@ -464,7 +470,16 @@ export default function WeeklyPlanPage() {
     setDays((prev) => {
       const dayData = prev[day] || { goals: "", categoryFocus: [], tasks: [], reflection: "" };
       const tasks = [...dayData.tasks];
-      tasks[idx] = value;
+      tasks[idx] = { ...tasks[idx], text: value };
+      return { ...prev, [day]: { ...dayData, tasks } };
+    });
+  };
+
+  const toggleTask = (day: string, idx: number) => {
+    setDays((prev) => {
+      const dayData = prev[day] || { goals: "", categoryFocus: [], tasks: [], reflection: "" };
+      const tasks = [...dayData.tasks];
+      tasks[idx] = { ...tasks[idx], done: !tasks[idx].done };
       return { ...prev, [day]: { ...dayData, tasks } };
     });
   };
@@ -709,13 +724,13 @@ export default function WeeklyPlanPage() {
                               <span className="text-xs text-muted">•</span>
                               <input
                                 type="text"
-                                value={t}
+                                value={typeof t === 'object' ? t.text : t}
                                 onChange={(e) => {
                                   setPreviewDayPlan((prev) => {
                                     const updated = { ...prev };
                                     const dayData = { ...updated[day] };
                                     const tasks = [...dayData.tasks];
-                                    tasks[i] = e.target.value;
+                                    tasks[i] = { text: e.target.value, done: false };
                                     updated[day] = { ...dayData, tasks };
                                     return updated;
                                   });
@@ -742,7 +757,7 @@ export default function WeeklyPlanPage() {
                               setPreviewDayPlan((prev) => {
                                 const updated = { ...prev };
                                 const dayData = { ...updated[day] };
-                                updated[day] = { ...dayData, tasks: [...dayData.tasks, ""] };
+                                updated[day] = { ...dayData, tasks: [...dayData.tasks, { text: "", done: false }] };
                                 return updated;
                               });
                             }}
@@ -928,9 +943,9 @@ export default function WeeklyPlanPage() {
                       {DAY_NAMES[idx]}
                     </span>
                     <span className="text-xs text-muted flex-1 text-left">{dayLabel}</span>
-                    {dayData.tasks.filter((t) => t.trim()).length > 0 && (
+                    {dayData.tasks.filter((t) => (typeof t === 'object' ? t.text : t).trim()).length > 0 && (
                       <span className="text-[10px] text-muted">
-                        {dayData.tasks.filter((t) => t.trim()).length} tasks
+                        {dayData.tasks.filter((t) => typeof t === 'object' && t.done).length}/{dayData.tasks.filter((t) => (typeof t === 'object' ? t.text : t).trim()).length} done
                       </span>
                     )}
                     {dayData.categoryFocus.length > 0 && (
@@ -990,15 +1005,29 @@ export default function WeeklyPlanPage() {
                           Tasks
                         </label>
                         <div className="space-y-1.5">
-                          {dayData.tasks.map((task, taskIdx) => (
+                          {dayData.tasks.map((task, taskIdx) => {
+                            const taskText = typeof task === 'object' ? task.text : task;
+                            const taskDone = typeof task === 'object' ? task.done : false;
+                            return (
                             <div key={taskIdx} className="flex items-center gap-2">
-                              <span className="text-xs text-muted">•</span>
+                              <button
+                                onClick={() => toggleTask(day, taskIdx)}
+                                className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                                  taskDone
+                                    ? "bg-green-500 border-green-500 text-white"
+                                    : "border-card-border hover:border-green-400"
+                                }`}
+                              >
+                                {taskDone && <span className="text-[8px]">✓</span>}
+                              </button>
                               <input
                                 type="text"
-                                value={task}
+                                value={taskText}
                                 onChange={(e) => updateTask(day, taskIdx, e.target.value)}
                                 placeholder="Task..."
-                                className="flex-1 px-2 py-1 rounded-lg border border-card-border bg-white dark:bg-gray-800 text-xs focus:outline-none focus:border-gray-400"
+                                className={`flex-1 px-2 py-1 rounded-lg border border-card-border bg-white dark:bg-gray-800 text-xs focus:outline-none focus:border-gray-400 ${
+                                  taskDone ? "line-through text-muted" : ""
+                                }`}
                               />
                               <button
                                 onClick={() => removeTask(day, taskIdx)}
@@ -1007,7 +1036,8 @@ export default function WeeklyPlanPage() {
                                 ✕
                               </button>
                             </div>
-                          ))}
+                            );
+                          })}
                           <button
                             onClick={() => addTask(day)}
                             className="text-xs text-muted hover:text-green-600 flex items-center gap-1"
