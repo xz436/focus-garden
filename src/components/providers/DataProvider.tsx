@@ -52,11 +52,11 @@ export default function DataProvider({
     try {
       const raw = localStorage.getItem("fg_sessions");
       if (raw) {
-        const sessions = JSON.parse(raw) as { id: string; category: string; completed_at: string | null; duration_minutes: number }[];
-        // Deduplicate by content (same category + completed_at + duration) since IDs may differ
+        const sessions = JSON.parse(raw) as { id: string; category: string; started_at: string; duration_minutes: number }[];
+        // Deduplicate by content (same category + started_at + duration = same session)
         const seen = new Set<string>();
         const deduped = sessions.filter((s) => {
-          const key = `${s.category}|${s.completed_at}|${s.duration_minutes}`;
+          const key = `${s.category}|${s.started_at}|${s.duration_minutes}`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
@@ -91,7 +91,7 @@ export default function DataProvider({
           const all = [...localSess, ...remote.sessions];
           const seen = new Set<string>();
           const deduped = all.filter((s) => {
-            const key = `${s.category}|${s.completed_at}|${s.duration_minutes}`;
+            const key = `${s.category}|${s.started_at}|${s.duration_minutes}`;
             if (seen.has(key)) return false;
             seen.add(key);
             return true;

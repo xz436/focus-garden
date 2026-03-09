@@ -243,6 +243,7 @@ function TimerPageInner() {
 
   const startTimeRef = useRef<string>("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completingRef = useRef(false);
   const originalTitleRef = useRef<string>("");
 
   // Persist active timer to localStorage so it survives page navigation
@@ -394,6 +395,10 @@ function TimerPageInner() {
   );
 
   const completeSession = useCallback(() => {
+    // Guard against double-completion
+    if (completingRef.current) return;
+    completingRef.current = true;
+
     saveActiveTimer("idle", category, 0, 0, "");
     addSession({
       category,
@@ -433,6 +438,7 @@ function TimerPageInner() {
     const settings = getSettings();
     setTimeout(() => {
       setShowComplete(false);
+      completingRef.current = false; // Reset guard for next session
       const isLongBreak = (sessionCount + 1) % 4 === 0;
       const breakMinutes = isLongBreak ? settings.longBreak : settings.shortBreak;
       const breakTotal = breakMinutes * 60;
