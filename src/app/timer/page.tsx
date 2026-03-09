@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Category } from "@/types";
 import { getPlantEmoji } from "@/lib/constants";
-import { addSession, getWeekCategorySessions, getWeekCategorySessionsForWeek, getSettings, getTodaySessions, checkAndUnlockAchievements, getCategories, getCategoryMap } from "@/lib/store";
-import { formatTime, getWeekStart, toLocalDateString } from "@/lib/utils";
+import { addSession, getWeekCategorySessions, getWeekCategorySessionsForWeek, getSettings, getTodaySessions, checkAndUnlockAchievements, getCategories, getCategoryMap, getDailyPlanWithWeekly, getWeeklyPlan } from "@/lib/store";
+import { formatTime, getWeekStart, toLocalDateString, getToday } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { showToast } from "@/components/ui/Toast";
@@ -214,6 +214,8 @@ function TimerPageInner() {
   const [weekSessions, setWeekSessions] = useState<Record<string, number>>({});
   const [weeklyTargets, setWeeklyTargets] = useState<Record<string, number>>({});
   const [progressWeekOffset, setProgressWeekOffset] = useState(0);
+  const [todayTasks, setTodayTasks] = useState<{ text: string; done: boolean; type: "task" | "category"; catId?: string }[]>([]);
+  const [todayCatDone, setTodayCatDone] = useState<Record<string, number>>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // Baby bonding manual log
@@ -283,6 +285,52 @@ function TimerPageInner() {
     setTimeLeft((settings.timerDurations?.coding || 25) * 60);
     setTotalTime((settings.timerDurations?.coding || 25) * 60);
     setWeeklyTargets(settings.weeklyTargets);
+
+    // Load today's tasks (category goals + custom tasks from weekly plan)
+    const today = getToday();
+    const dailyPlan = getDailyPlanWithWeekly(today);
+    const weekStart = getWeekStart();
+    const weeklyPlan = getWeeklyPlan(weekStart);
+    const weeklyDay = weeklyPlan?.days?.[today];
+    const todaySess = getTodaySessions();
+
+    // Count sessions done per category today
+    const catDone: Record<string, number> = {};
+    for (const s of todaySess) {
+      catDone[s.category] = (catDone[s.category] || 0) + 1;
+    }
+    setTodayCatDone(catDone);
+
+    // Build combined task list
+    const tasks: { text: string; done: boolean; type: "task" | "category"; catId?: string }[] = [];
+
+    // Add category-based tasks from daily targets
+    if (dailyPlan?.categoryGoals) {
+      for (const cat of cats) {
+        const target = dailyPlan.categoryGoals[cat.id] || 0;
+        if (target > 0) {
+          const done = catDone[cat.id] || 0;
+          tasks.push({
+            text: `${cat.emoji} ${cat.label} × ${target}`,
+            done: done >= target,
+            type: "category",
+            catId: cat.id,
+          });
+        }
+      }
+    }
+
+    // Add custom tasks from weekly plan's day
+    if (weeklyDay?.tasks) {
+      for (const t of weeklyDay.tasks) {
+        const task = typeof t === "object" ? t : { text: t, done: false };
+        if (task.text.trim()) {
+          tasks.push({ text: task.text, done: task.done, type: "task" });
+        }
+      }
+    }
+
+    setTodayTasks(tasks);
 
     // Restore active timer if navigating back
     try {
@@ -1204,63 +1252,96 @@ function TimerPageInner() {
           </Card>
         )}
 
-        {/* Quick stats */}
+        {/* Today's Tasks */}
         <Card>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-muted">
-              {progressWeekOffset === 0 ? "This Week's Progress" : (() => {
-                const base = getWeekStart();
-                const d = new Date(base + "T00:00:00");
-                d.setDate(d.getDate() + progressWeekOffset * 7);
-                const end = new Date(d);
-                end.setDate(end.getDate() + 6);
-                const fmt = (dt: Date) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                return `${fmt(d)} – ${fmt(end)}`;
-              })()}
-            </h3>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setProgressWeekOffset((o) => o - 1)}
-                className="w-6 h-6 rounded-full border border-card-border flex items-center justify-center text-xs hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                ‹
-              </button>
-              {progressWeekOffset !== 0 && (
-                <button
-                  onClick={() => setProgressWeekOffset(0)}
-                  className="px-2 py-0.5 rounded-full text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                >
-                  Now
-                </button>
-              )}
-              <button
-                onClick={() => setProgressWeekOffset((o) => o + 1)}
-                className="w-6 h-6 rounded-full border border-card-border flex items-center justify-center text-xs hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                ›
-              </button>
-            </div>
+            <h3 className="text-sm font-semibold text-muted">Today&apos;s Tasks</h3>
+            <span className="text-[10px] text-muted">
+              {todayTasks.filter((t) => t.done).length}/{todayTasks.length} done
+            </span>
           </div>
-          <div className="space-y-2">
-            {categories.map((cat) => (
-              <div key={cat.id} className="flex items-center gap-2">
-                <span className="text-sm w-5">{cat.emoji}</span>
-                <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+
+          {todayTasks.length > 0 ? (
+            <div className="space-y-2">
+              {todayTasks.map((task, idx) => (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all ${
+                    task.type === "category" && !task.done
+                      ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    if (task.type === "category" && task.catId && timerState === "idle") {
+                      setCategory(task.catId);
+                    }
+                  }}
+                >
                   <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.min(((weekSessions[cat.id] || 0) / (weeklyTargets[cat.id] || 1)) * 100, 100)}%`,
-                      backgroundColor: cat.color,
-                    }}
-                  />
+                    className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                      task.done
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "border-card-border"
+                    }`}
+                  >
+                    {task.done && <span className="text-[8px]">✓</span>}
+                  </div>
+                  <span className={`text-sm flex-1 ${task.done ? "line-through text-muted" : ""}`}>
+                    {task.text}
+                  </span>
+                  {task.type === "category" && task.catId && (
+                    <span className="text-[10px] text-muted">
+                      {todayCatDone[task.catId] || 0}/{(getDailyPlanWithWeekly(getToday())?.categoryGoals[task.catId]) || 0}
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs text-muted w-10 text-right">
-                  {weekSessions[cat.id] || 0}/{weeklyTargets[cat.id] || 0}
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted text-center py-3">
+              No tasks planned for today. <a href="/weekly-plan" className="text-green-600 hover:underline">Set up your weekly plan</a>
+            </p>
+          )}
+
+          {/* Today's summary */}
+          <div className="mt-3 pt-3 border-t border-card-border flex items-center justify-between">
+            <span className="text-[10px] text-muted">
+              {sessionCount} sessions · {Math.round(sessionCount * (getSettings().timerDurations?.coding || 25) / 60 * 10) / 10}h focus
+            </span>
+            <a href="/weekly-plan" className="text-[10px] text-green-600 hover:underline">
+              Edit Plan →
+            </a>
           </div>
         </Card>
+
+        {/* Weekly progress (collapsible) */}
+        <details className="group">
+          <summary className="flex items-center gap-2 text-xs text-muted cursor-pointer py-2 hover:text-foreground">
+            <span>Weekly Progress</span>
+            <span className="text-[10px]">▼</span>
+          </summary>
+          <Card className="mt-1">
+            <div className="space-y-2">
+              {categories.map((cat) => (
+                <div key={cat.id} className="flex items-center gap-2">
+                  <span className="text-sm w-5">{cat.emoji}</span>
+                  <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(((weekSessions[cat.id] || 0) / (weeklyTargets[cat.id] || 1)) * 100, 100)}%`,
+                        backgroundColor: cat.color,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted w-10 text-right">
+                    {weekSessions[cat.id] || 0}/{weeklyTargets[cat.id] || 0}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </details>
       </div>
     </div>
   );
