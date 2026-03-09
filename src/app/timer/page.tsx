@@ -328,16 +328,36 @@ function TimerPageInner() {
     }
   }, [showComplete, progressWeekOffset]);
 
-  // Update tab title with countdown
+  // Update tab title and favicon with countdown
   useEffect(() => {
+    const favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+    const originalFavicon = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>";
+
     if (timerState === "running" || timerState === "paused" || timerState === "break") {
       const catEmoji = categoryMap[category]?.emoji || "🌱";
-      const state = timerState === "break" ? "Break" : timerState === "paused" ? "⏸" : "";
-      document.title = `${formatTime(timeLeft)} ${state} ${catEmoji} Focus Garden`;
+      const displayEmoji = timerState === "break" ? "☕" : catEmoji;
+      const state = timerState === "break" ? "Break" : timerState === "paused" ? "⏸ " : "";
+      document.title = `${formatTime(timeLeft)} ${state}${displayEmoji} Focus Garden`;
+
+      // Update favicon to show session state
+      if (favicon) {
+        const color = timerState === "break" ? "%23f59e0b" : timerState === "paused" ? "%239ca3af" : "%2322c55e";
+        favicon.href = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='${color}'/><text x='50' y='55' text-anchor='middle' dominant-baseline='middle' font-size='50'>${encodeURIComponent(displayEmoji)}</text></svg>`;
+      }
     } else {
       document.title = "Focus Garden";
+      if (favicon) {
+        favicon.href = originalFavicon;
+      }
     }
-  }, [timeLeft, timerState, category]);
+
+    return () => {
+      document.title = "Focus Garden";
+      if (favicon) {
+        favicon.href = originalFavicon;
+      }
+    };
+  }, [timeLeft, timerState, category, categoryMap]);
 
   // Ambient sound management
   useEffect(() => {
@@ -420,6 +440,12 @@ function TimerPageInner() {
       setTotalTime(breakTotal);
       setTimerState("break");
       saveActiveTimer("break", category, breakTotal, breakTotal, startTimeRef.current);
+      showToast({
+        emoji: "☕",
+        title: `Take a ${breakMinutes}-min break!`,
+        description: isLongBreak ? "You've earned a long break. Stretch and recharge!" : "Rest your eyes, grab some water.",
+        type: "info",
+      });
     }, 2000);
   }, [category, notes, sessionCount, totalTime, saveActiveTimer]);
 
