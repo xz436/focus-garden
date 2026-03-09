@@ -47,6 +47,26 @@ export default function DataProvider({
   const [synced, setSynced] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
+  // One-time cleanup: deduplicate localStorage data on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("fg_sessions");
+      if (raw) {
+        const sessions = JSON.parse(raw) as { id: string }[];
+        const seen = new Set<string>();
+        const deduped = sessions.filter((s) => {
+          if (seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        });
+        if (deduped.length < sessions.length) {
+          console.log(`DataProvider: Cleaned ${sessions.length - deduped.length} duplicate sessions`);
+          localStorage.setItem("fg_sessions", JSON.stringify(deduped));
+        }
+      }
+    } catch {}
+  }, []);
+
   const hydrateFromSupabase = useCallback(async (userId: string) => {
     setSyncing(true);
     try {
