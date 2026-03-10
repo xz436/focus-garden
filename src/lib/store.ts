@@ -243,23 +243,36 @@ export function getDailyPlanWithWeekly(date: string): DailyPlanLocal | null {
 
   const weeklyIntentions = weeklyDay?.tasks?.filter((t) => typeof t === 'object' ? t.text : t).map((t) => typeof t === 'object' ? t.text : t).join("\n") || "";
 
-  // Calculate daily category goals from weekly targets
+  // Calculate smart daily category goals from weekly targets
+  // Accounts for sessions already done this week and remaining days
   const weeklyGoals: Record<string, number> = {};
   if (weeklyPlan?.categoryTargets) {
+    const allSessions = getSessions();
+    const weekEndDate = new Date(weekStart + "T00:00:00");
+    weekEndDate.setDate(weekEndDate.getDate() + 6);
+    const weekEndStr = toLocalDateString(weekEndDate);
+
+    // Count sessions done so far this week (before this date)
+    const doneThisWeek: Record<string, number> = {};
+    for (const s of allSessions) {
+      if (!s.completed_at) continue;
+      const d = toLocalDateString(new Date(s.completed_at));
+      if (d >= weekStart && d <= weekEndStr) {
+        doneThisWeek[s.category] = (doneThisWeek[s.category] || 0) + 1;
+      }
+    }
+
+    // Count remaining days from this date to end of week (inclusive)
+    const thisDate = new Date(date + "T00:00:00");
+    const endDate = new Date(weekStart + "T00:00:00");
+    endDate.setDate(endDate.getDate() + 6);
+    const remainingDays = Math.max(1, Math.floor((endDate.getTime() - thisDate.getTime()) / (86400000)) + 1);
+
     for (const [catId, weeklyTarget] of Object.entries(weeklyPlan.categoryTargets)) {
       if (weeklyTarget > 0) {
-        // If this category is a focus for this day, give it a proportional daily target
-        const isFocusDay = weeklyDay?.categoryFocus?.includes(catId);
-        if (isFocusDay) {
-          // Count how many days this category is focused on
-          const focusDays = Object.values(weeklyPlan.days).filter(
-            (d) => d.categoryFocus?.includes(catId)
-          ).length;
-          weeklyGoals[catId] = focusDays > 0 ? Math.ceil(weeklyTarget / focusDays) : Math.ceil(weeklyTarget / 7);
-        } else {
-          // Not a focus day but category has a target — give a base daily amount
-          weeklyGoals[catId] = Math.ceil(weeklyTarget / 7);
-        }
+        const done = doneThisWeek[catId] || 0;
+        const remaining = Math.max(0, weeklyTarget - done);
+        weeklyGoals[catId] = Math.ceil(remaining / remainingDays);
       }
     }
   }
