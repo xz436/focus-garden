@@ -534,7 +534,7 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {todaySessions.map((session) => {
                 const cat = categoryMap[session.category];
-                const time = new Date(session.completed_at!);
+                const time = new Date(session.started_at);
                 return (
                   <div
                     key={session.id}
