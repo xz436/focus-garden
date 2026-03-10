@@ -19,7 +19,16 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
 function getBabyAgeMonths(birthdate: string): number {
-  const birth = new Date(birthdate + "T00:00:00");
+  if (!birthdate) return 0;
+  // Handle both "YYYY-MM-DD" and "MM/DD/YYYY" formats
+  let birth: Date;
+  if (birthdate.includes("/")) {
+    const parts = birthdate.split("/");
+    birth = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+  } else {
+    birth = new Date(birthdate + "T00:00:00");
+  }
+  if (isNaN(birth.getTime())) return 0;
   const now = new Date();
   return (
     (now.getFullYear() - birth.getFullYear()) * 12 +
@@ -29,7 +38,15 @@ function getBabyAgeMonths(birthdate: string): number {
 }
 
 function formatBabyAge(birthdate: string): string {
-  const birth = new Date(birthdate + "T00:00:00");
+  if (!birthdate) return "0 months old";
+  let birth: Date;
+  if (birthdate.includes("/")) {
+    const parts = birthdate.split("/");
+    birth = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+  } else {
+    birth = new Date(birthdate + "T00:00:00");
+  }
+  if (isNaN(birth.getTime())) return "0 months old";
   const now = new Date();
   let months =
     (now.getFullYear() - birth.getFullYear()) * 12 +
