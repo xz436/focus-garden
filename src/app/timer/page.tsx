@@ -221,6 +221,10 @@ function TimerPageInner() {
   // Baby bonding manual log
   const [babyMinutes, setBabyMinutes] = useState(30);
   const [babyActivity, setBabyActivity] = useState("");
+  const [babyStartTime, setBabyStartTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  });
 
   // Manual session log
   const [showManualLog, setShowManualLog] = useState(false);
@@ -625,14 +629,16 @@ function TimerPageInner() {
   }, [timerState, category, totalTime, timeLeft, saveActiveTimer]);
 
   const logBabyTime = () => {
-    const now = new Date();
-    const started = new Date(now.getTime() - babyMinutes * 60 * 1000);
+    const [hours, mins] = babyStartTime.split(":").map(Number);
+    const started = new Date();
+    started.setHours(hours, mins, 0, 0);
+    const completed = new Date(started.getTime() + babyMinutes * 60 * 1000);
     addSession({
       category: "baby",
       duration_minutes: babyMinutes,
       notes: babyActivity || null,
       started_at: started.toISOString(),
-      completed_at: now.toISOString(),
+      completed_at: completed.toISOString(),
     });
     setBabyActivity("");
     setBabyMinutes(30);
@@ -944,16 +950,27 @@ function TimerPageInner() {
               </p>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-muted">Duration (minutes)</label>
-                <input
-                  type="number"
-                  value={babyMinutes}
-                  onChange={(e) => setBabyMinutes(Number(e.target.value))}
-                  min={1}
-                  max={480}
-                  className="mt-1 w-full rounded-xl border border-card-border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-lg font-semibold text-center focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-100 dark:focus:ring-pink-900"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-muted">Start Time</label>
+                  <input
+                    type="time"
+                    value={babyStartTime}
+                    onChange={(e) => setBabyStartTime(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-card-border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-center focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-100 dark:focus:ring-pink-900"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted">Duration (min)</label>
+                  <input
+                    type="number"
+                    value={babyMinutes}
+                    onChange={(e) => setBabyMinutes(Number(e.target.value))}
+                    min={1}
+                    max={480}
+                    className="mt-1 w-full rounded-xl border border-card-border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-center font-semibold focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-100 dark:focus:ring-pink-900"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted">Activity (optional)</label>
