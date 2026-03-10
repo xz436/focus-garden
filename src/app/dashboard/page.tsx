@@ -19,12 +19,13 @@ import {
   autoSnapshotPreviousWeek,
   addSession,
   getDailyPlanWithWeekly,
+  getWeeklyPlan,
   DailyPlanLocal,
   getCategories,
   getCategoryMap,
   generateDailyReport,
 } from "@/lib/store";
-import { getGreeting, formatMinutes, getToday } from "@/lib/utils";
+import { getGreeting, formatMinutes, getToday, getWeekStart } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { showToast } from "@/components/ui/Toast";
@@ -77,8 +78,20 @@ export default function DashboardPage() {
     setStreakDays(getStreakData().current);
     setDisplayName(getSettings().displayName);
     const plan = getDailyPlanWithWeekly(getToday());
-    if (plan && (plan.intentions || Object.values(plan.categoryGoals).some((v) => v > 0))) {
-      setTodayPlan({ intentions: plan.intentions, categoryGoals: plan.categoryGoals });
+    // Get weekly plan tasks for today (these are the real tasks)
+    const weekStart = getWeekStart();
+    const weeklyPlan = getWeeklyPlan(weekStart);
+    const weeklyDay = weeklyPlan?.days?.[getToday()];
+    const weeklyTasks = weeklyDay?.tasks
+      ?.map((t: { text: string; done: boolean } | string) => typeof t === "object" ? t.text : t)
+      .filter(Boolean)
+      .join("\n") || "";
+
+    if (plan && (weeklyTasks || plan.intentions || Object.values(plan.categoryGoals).some((v) => v > 0))) {
+      setTodayPlan({
+        intentions: weeklyTasks || plan.intentions,
+        categoryGoals: plan.categoryGoals,
+      });
     }
   };
 
