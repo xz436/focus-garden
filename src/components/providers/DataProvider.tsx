@@ -85,25 +85,12 @@ export default function DataProvider({
       const hasLocalData = localSessions.length > 0;
 
       if (hasRemoteData) {
-        // Remote has data — merge with localStorage (deduplicate by content)
+        // Remote is source of truth — replace localStorage with remote data
         if (remote.sessions.length > 0) {
-          const localSess = getSessions();
-          const all = [...localSess, ...remote.sessions];
-          const seen = new Set<string>();
-          const deduped = all.filter((s) => {
-            const key = `${s.category}|${s.started_at}|${s.duration_minutes}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          localStorage.setItem("fg_sessions", JSON.stringify(deduped));
+          localStorage.setItem("fg_sessions", JSON.stringify(remote.sessions));
         }
         if (remote.problems.length > 0) {
-          const localProbs = getProblems();
-          const mergedMap = new Map<string, typeof localProbs[0]>();
-          for (const p of localProbs) mergedMap.set(p.id, p);
-          for (const p of remote.problems) mergedMap.set(p.id, p);
-          localStorage.setItem("fg_problems", JSON.stringify([...mergedMap.values()]));
+          localStorage.setItem("fg_problems", JSON.stringify(remote.problems));
           localStorage.setItem("fg_initialized", "true");
         }
         if (Object.keys(remote.dailyPlans).length > 0) {
