@@ -261,6 +261,51 @@ function TimerPageInner() {
     }
   }, []);
 
+  const loadTodayTasks = useCallback((cats?: Category[]) => {
+    const allCats = cats || categories;
+    if (allCats.length === 0) return;
+
+    const today = getToday();
+    const dailyPlan = getDailyPlanWithWeekly(today);
+    const weekStart = getWeekStart();
+    const weeklyPlan = getWeeklyPlan(weekStart);
+    const weeklyDay = weeklyPlan?.days?.[today];
+    const todaySess = getTodaySessions();
+
+    const catDone: Record<string, number> = {};
+    for (const s of todaySess) {
+      catDone[s.category] = (catDone[s.category] || 0) + 1;
+    }
+    setTodayCatDone(catDone);
+
+    const tasks: { text: string; done: boolean; type: "task" | "category"; catId?: string }[] = [];
+
+    if (dailyPlan?.categoryGoals) {
+      for (const cat of allCats) {
+        const target = dailyPlan.categoryGoals[cat.id] || 0;
+        if (target > 0) {
+          tasks.push({
+            text: `${cat.emoji} ${cat.label} × ${target}`,
+            done: (catDone[cat.id] || 0) >= target,
+            type: "category",
+            catId: cat.id,
+          });
+        }
+      }
+    }
+
+    if (weeklyDay?.tasks) {
+      for (const t of weeklyDay.tasks) {
+        const task = typeof t === "object" ? t : { text: t, done: false };
+        if (task.text.trim()) {
+          tasks.push({ text: task.text, done: task.done, type: "task" });
+        }
+      }
+    }
+
+    setTodayTasks(tasks);
+  }, [categories]);
+
   useEffect(() => {
     originalTitleRef.current = document.title;
     requestNotificationPermission();
@@ -287,51 +332,7 @@ function TimerPageInner() {
     setTotalTime((settings.timerDurations?.coding || 25) * 60);
     setWeeklyTargets(settings.weeklyTargets);
 
-    // Load today's tasks (category goals + custom tasks from weekly plan)
-    const today = getToday();
-    const dailyPlan = getDailyPlanWithWeekly(today);
-    const weekStart = getWeekStart();
-    const weeklyPlan = getWeeklyPlan(weekStart);
-    const weeklyDay = weeklyPlan?.days?.[today];
-    const todaySess = getTodaySessions();
-
-    // Count sessions done per category today
-    const catDone: Record<string, number> = {};
-    for (const s of todaySess) {
-      catDone[s.category] = (catDone[s.category] || 0) + 1;
-    }
-    setTodayCatDone(catDone);
-
-    // Build combined task list
-    const tasks: { text: string; done: boolean; type: "task" | "category"; catId?: string }[] = [];
-
-    // Add category-based tasks from daily targets
-    if (dailyPlan?.categoryGoals) {
-      for (const cat of cats) {
-        const target = dailyPlan.categoryGoals[cat.id] || 0;
-        if (target > 0) {
-          const done = catDone[cat.id] || 0;
-          tasks.push({
-            text: `${cat.emoji} ${cat.label} × ${target}`,
-            done: done >= target,
-            type: "category",
-            catId: cat.id,
-          });
-        }
-      }
-    }
-
-    // Add custom tasks from weekly plan's day
-    if (weeklyDay?.tasks) {
-      for (const t of weeklyDay.tasks) {
-        const task = typeof t === "object" ? t : { text: t, done: false };
-        if (task.text.trim()) {
-          tasks.push({ text: task.text, done: task.done, type: "task" });
-        }
-      }
-    }
-
-    setTodayTasks(tasks);
+    loadTodayTasks(cats);
 
     // Restore active timer if navigating back
     try {
@@ -457,6 +458,7 @@ function TimerPageInner() {
       completed_at: new Date().toISOString(),
     });
     setSessionCount((c) => c + 1);
+    loadTodayTasks();
     setCompletedCategory(category);
     setShowComplete(true);
     setNotes("");
@@ -502,7 +504,7 @@ function TimerPageInner() {
         type: "info",
       });
     }, 2000);
-  }, [category, notes, sessionCount, totalTime, saveActiveTimer]);
+  }, [category, notes, sessionCount, totalTime, saveActiveTimer, loadTodayTasks]);
 
   const startTimer = useCallback(() => {
     const minutes = getTimerDuration(category);
@@ -635,6 +637,7 @@ function TimerPageInner() {
     setBabyActivity("");
     setBabyMinutes(30);
     setSessionCount((c) => c + 1);
+    loadTodayTasks();
     setCompletedCategory("baby");
     setShowComplete(true);
     setTimeout(() => setShowComplete(false), 2000);
@@ -655,6 +658,7 @@ function TimerPageInner() {
     setManualNotes("");
     setManualMinutes(25);
     setSessionCount((c) => c + 1);
+    loadTodayTasks();
     setShowManualLog(false);
     setCompletedCategory(manualCategory);
     setShowComplete(true);
