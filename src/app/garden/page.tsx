@@ -13,11 +13,12 @@ import {
   autoSnapshotPreviousWeek,
   getGardenSnapshots,
   getSettings,
+  getWeeklyPlan,
   GardenSnapshot,
   getCategories,
   getCategoryMap,
 } from "@/lib/store";
-import { formatMinutes } from "@/lib/utils";
+import { formatMinutes, getWeekStart } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 
 export default function GardenPage() {
@@ -95,9 +96,18 @@ export default function GardenPage() {
     }
   };
 
+  // Use weekly plan targets if available, fall back to settings
+  const weeklyPlan = getWeeklyPlan(getWeekStart());
+  const targets: Record<string, number> = { ...settings.weeklyTargets };
+  if (weeklyPlan?.categoryTargets) {
+    for (const [catId, target] of Object.entries(weeklyPlan.categoryTargets)) {
+      if (target > 0) targets[catId] = target;
+    }
+  }
+
   // Calculate garden score
   const gardenScore = categories.reduce((score, cat) => {
-    const pct = Math.min((weekCounts[cat.id] || 0) / (settings.weeklyTargets[cat.id] || 1), 1);
+    const pct = Math.min((weekCounts[cat.id] || 0) / (targets[cat.id] || 1), 1);
     return score + pct;
   }, 0);
   const gardenPct = Math.round((gardenScore / (categories.length || 1)) * 100);
@@ -162,13 +172,13 @@ export default function GardenPage() {
               </div>
               <div className="flex gap-1 mt-1.5">
                 {categories.map((cat) => {
-                  const done = (weekCounts[cat.id] || 0) >= (settings.weeklyTargets[cat.id] || 1);
+                  const done = (weekCounts[cat.id] || 0) >= (targets[cat.id] || 1);
                   return (
                     <div
                       key={cat.id}
                       className={`w-2.5 h-2.5 rounded-full transition-all ${done ? "scale-125" : "opacity-30"}`}
                       style={{ backgroundColor: cat.color }}
-                      title={`${cat.label}: ${weekCounts[cat.id] || 0}/${settings.weeklyTargets[cat.id] || 0}`}
+                      title={`${cat.label}: ${weekCounts[cat.id] || 0}/${targets[cat.id] || 0}`}
                     />
                   );
                 })}
@@ -472,8 +482,8 @@ export default function GardenPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted">
-                    <span>Target: {settings.weeklyTargets[selectedPlant] || 0}/week</span>
-                    {(weekCounts[selectedPlant] || 0) >= (settings.weeklyTargets[selectedPlant] || 0) && (
+                    <span>Target: {targets[selectedPlant] || 0}/week</span>
+                    {(weekCounts[selectedPlant] || 0) >= (targets[selectedPlant] || 0) && (
                       <span className="text-green-600 font-medium">Target reached! 🎉</span>
                     )}
                   </div>
@@ -528,7 +538,7 @@ export default function GardenPage() {
             {categories.map((cat) => {
               const sessions = weekCounts[cat.id];
               const stage = getPlantStage(sessions);
-              const target = settings.weeklyTargets[cat.id];
+              const target = targets[cat.id];
               const nextStage = PLANT_STAGES.find((s) => s.minSessions > sessions);
               const progressToNext = nextStage
                 ? ((sessions - stage.minSessions) / (nextStage.minSessions - stage.minSessions)) * 100
