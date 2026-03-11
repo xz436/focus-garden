@@ -334,7 +334,16 @@ function TimerPageInner() {
     setSessionCount(todaySessions.length);
     setTimeLeft((settings.timerDurations?.coding || 25) * 60);
     setTotalTime((settings.timerDurations?.coding || 25) * 60);
-    setWeeklyTargets(settings.weeklyTargets);
+    // Use weekly plan targets if available, fall back to settings
+    const weekStart = getWeekStart();
+    const wp = getWeeklyPlan(weekStart);
+    const mergedTargets = { ...settings.weeklyTargets };
+    if (wp?.categoryTargets) {
+      for (const [catId, target] of Object.entries(wp.categoryTargets)) {
+        if (target > 0) mergedTargets[catId] = target;
+      }
+    }
+    setWeeklyTargets(mergedTargets);
 
     loadTodayTasks(cats);
 
