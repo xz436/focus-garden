@@ -12,6 +12,7 @@ const MAIN_NAV = [
 ];
 
 const MORE_ITEMS = [
+  { href: "/journal", label: "Bible Journal", icon: "📖" },
   { href: "/weekly-plan", label: "Plan", icon: "📋" },
   { href: "/baby", label: "Baby Activities", icon: "🌷" },
   { href: "/summary", label: "Summary", icon: "📊" },

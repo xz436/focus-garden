@@ -9,7 +9,9 @@ import {
   getDailyQuote,
 } from "@/lib/constants";
 import {
+  getSessions,
   getTodaySessions,
+  getWeekSessions,
   getWeekCategorySessions,
   getProblems,
   getStreakData,
@@ -32,6 +34,8 @@ import { showToast } from "@/components/ui/Toast";
 import { triggerConfetti } from "@/components/ui/Confetti";
 import MonthCalendar from "@/components/ui/MonthCalendar";
 import SessionEditModal from "@/components/ui/SessionEditModal";
+import DailyArtwork from "@/components/ui/DailyArtwork";
+import EveningReflectionCard from "@/components/ui/EveningReflectionCard";
 
 export default function DashboardPage() {
   const [todaySessions, setTodaySessions] = useState<Session[]>([]);
@@ -157,6 +161,8 @@ export default function DashboardPage() {
 
   const handleShareLink = async () => {
     try {
+      const allSessions = getSessions();
+      const weekSess = getWeekSessions();
       const snapshotData = {
         garden: Object.fromEntries(
           categories.map((cat) => [
@@ -165,10 +171,10 @@ export default function DashboardPage() {
           ])
         ),
         streak: streakDays,
-        totalSessions: todaySessions.length,
-        totalMinutes: todaySessions.reduce((s, x) => s + x.duration_minutes, 0),
-        weekSessions: Object.values(weekCounts).reduce((a, b) => a + b, 0),
-        weekMinutes: todaySessions.reduce((s, x) => s + x.duration_minutes, 0),
+        totalSessions: allSessions.length,
+        totalMinutes: allSessions.reduce((s, x) => s + x.duration_minutes, 0),
+        weekSessions: weekSess.length,
+        weekMinutes: weekSess.reduce((s, x) => s + x.duration_minutes, 0),
         blind75Solved: solvedCount,
       };
 
@@ -230,6 +236,13 @@ export default function DashboardPage() {
     (cat) => !todayCategoryCounts[cat.id] && getSettings().weeklyTargets[cat.id] >= 7
   );
 
+  // Check if all daily goals are met (for evening reflection trigger)
+  const allGoalsMet = todayPlan
+    ? categories
+        .filter((cat) => (todayPlan.categoryGoals[cat.id] || 0) > 0)
+        .every((cat) => (todayCategoryCounts[cat.id] || 0) >= todayPlan.categoryGoals[cat.id])
+    : false;
+
   const today = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -246,34 +259,35 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold">
               {getGreeting()}, {displayName}!
             </h1>
-            {todaySessions.length > 0 && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={handleShareProgress}
-                  className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                  title="Share as text"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={handleShareLink}
-                  className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                  title="Create shareable link"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleShareProgress}
+                className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Share as text"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              </button>
+              <button
+                onClick={handleShareLink}
+                className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Create shareable link"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              </button>
+            </div>
           </div>
           <p className="text-sm text-muted">
             {dayNames[today.getDay()]}, {monthNames[today.getMonth()]} {today.getDate()}
             {streakDays > 0 && ` · ${streakDays} day streak 🔥`}
           </p>
         </div>
+
+        {/* Evening Reflection Prompt */}
+        <EveningReflectionCard allGoalsMet={allGoalsMet} />
 
         {/* Streak Milestone Celebration */}
         {[100, 60, 30, 21, 14, 7].some((m) => streakDays === m) && (
@@ -587,6 +601,8 @@ export default function DashboardPage() {
           )}
         </Card>
 
+        {/* Daily Devotional Artwork */}
+        <DailyArtwork />
 
       </div>
 
@@ -658,7 +674,6 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Session Edit Modal */}
       {editingSession && (
         <SessionEditModal
           session={editingSession}

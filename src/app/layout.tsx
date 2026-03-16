@@ -8,6 +8,7 @@ import ThemeProvider from "@/components/ui/ThemeProvider";
 import AuthProvider from "@/components/providers/AuthProvider";
 import LanguageProvider from "@/components/providers/LanguageProvider";
 import DataProvider from "@/components/providers/DataProvider";
+import BibleGateProvider from "@/components/providers/BibleGateProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,10 +58,12 @@ export default function RootLayout({
           <LanguageProvider>
             <AuthProvider>
               <DataProvider>
-                {children}
-                <Confetti />
-                <ToastContainer />
-                <BottomNav />
+                <BibleGateProvider>
+                  {children}
+                  <Confetti />
+                  <ToastContainer />
+                  <BottomNav />
+                </BibleGateProvider>
               </DataProvider>
             </AuthProvider>
           </LanguageProvider>
