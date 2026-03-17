@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient } from "@/lib/supabase";
+import { getTodayPacific } from "@/lib/utils";
 
 // Pages that should NOT be gated
 const EXEMPT_PATHS = [
@@ -43,7 +44,7 @@ export default function BibleGateProvider({
     }
 
     // Check sessionStorage cache first (avoid DB call on every navigation)
-    const cacheKey = `fg_bible_gate_${new Date().toISOString().split("T")[0]}`;
+    const cacheKey = `fg_bible_gate_${getTodayPacific()}`;
     if (sessionStorage.getItem(cacheKey) === "passed") {
       setChecked(true);
       return;
@@ -51,7 +52,7 @@ export default function BibleGateProvider({
 
     // Check Supabase for today's completion
     const supabase = createClient();
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayPacific();
 
     supabase
       .from("bible_journal")

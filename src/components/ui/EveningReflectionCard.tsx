@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient } from "@/lib/supabase";
+import { getTodayPacific, getPacificHour } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
@@ -23,17 +24,17 @@ export default function EveningReflectionCard({
   useEffect(() => {
     if (!user) return;
 
-    const hour = new Date().getHours();
+    const hour = getPacificHour();
     const isAfter4pm = hour >= 16;
 
     if (!isAfter4pm && !allGoalsMet) return;
 
     // Don't show popup if dismissed this session
-    const dismissKey = `fg_evening_dismissed_${new Date().toISOString().split("T")[0]}`;
+    const dismissKey = `fg_evening_dismissed_${getTodayPacific()}`;
     if (sessionStorage.getItem(dismissKey)) return;
 
     const supabase = createClient();
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayPacific();
 
     supabase
       .from("bible_journal")
@@ -53,7 +54,7 @@ export default function EveningReflectionCard({
   }, [user, allGoalsMet]);
 
   const handleDismiss = () => {
-    const dismissKey = `fg_evening_dismissed_${new Date().toISOString().split("T")[0]}`;
+    const dismissKey = `fg_evening_dismissed_${getTodayPacific()}`;
     sessionStorage.setItem(dismissKey, "1");
     setDismissed(true);
     setShowModal(false);

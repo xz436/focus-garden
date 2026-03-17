@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient } from "@/lib/supabase";
+import { getTodayPacific } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 
 const PRAYERS = [
@@ -24,7 +25,7 @@ export default function DailyArtwork() {
     if (!user) return;
 
     const supabase = createClient();
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayPacific();
 
     supabase
       .from("bible_journal")

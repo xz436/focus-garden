@@ -28,6 +28,16 @@ export function getToday(): string {
   return toLocalDateString(new Date());
 }
 
+export function getTodayPacific(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}
+
+export function getPacificHour(): number {
+  return parseInt(
+    new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hour12: false })
+  );
+}
+
 export function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";

@@ -83,7 +83,7 @@ Technical requirements:
     const svgDataUrl = `data:image/svg+xml;base64,${Buffer.from(svgCode).toString("base64")}`;
 
     // Save to bible_journal
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
     await supabase
       .from("bible_journal")
       .update({ artwork_url: svgDataUrl })

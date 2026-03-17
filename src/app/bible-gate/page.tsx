@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient } from "@/lib/supabase";
 import { addSession } from "@/lib/store";
+import { getTodayPacific } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
@@ -70,7 +71,7 @@ export default function BibleGatePage() {
   // Journal entry ID for updates
   const [journalId, setJournalId] = useState<string | null>(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayPacific();
 
   // Check if already completed today
   useEffect(() => {

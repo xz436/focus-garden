@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient } from "@/lib/supabase";
 import { getTodaySessions, addSession } from "@/lib/store";
+import { getTodayPacific } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
@@ -51,7 +52,7 @@ export default function EveningReflectionPage() {
     { category: string; duration: number }[]
   >([]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayPacific();
 
   // Load today's journal and sessions
   useEffect(() => {
