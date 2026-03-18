@@ -48,6 +48,7 @@ export default function BibleGatePage() {
   const [todayPlan, setTodayPlan] = useState<ReadingPlan | null>(null);
   const [passageText, setPassageText] = useState("");
   const [passageLoading, setPassageLoading] = useState(false);
+  const [startedAt, setStartedAt] = useState("");
 
   // Quiz state
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -137,6 +138,7 @@ export default function BibleGatePage() {
         );
         const data = await res.json();
         setPassageText(data.text || "Failed to load passage.");
+        setStartedAt(new Date().toISOString());
       } catch {
         setPassageText("Failed to load passage. Please try again.");
       }
@@ -298,7 +300,7 @@ export default function BibleGatePage() {
       category: "spiritual",
       duration_minutes: 15,
       notes: `Morning devotion: ${todayPlan.reference}`,
-      started_at: new Date().toISOString(),
+      started_at: startedAt || new Date().toISOString(),
       completed_at: new Date().toISOString(),
     });
 
