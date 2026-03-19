@@ -142,8 +142,8 @@
     if (lastSynced === problemInfo.slug) return;
     lastSynced = problemInfo.slug;
 
-    const data = await chrome.storage.local.get(["appUrl", "supabaseUrl", "supabaseKey"]);
-    if (!data.supabaseUrl || !data.supabaseKey) {
+    const data = await chrome.storage.local.get(["appUrl", "accessToken", "userId"]);
+    if (!data.accessToken) {
       console.log("[Focus Garden] Not connected — skipping sync");
       return;
     }
@@ -151,13 +151,17 @@
     const appUrl = data.appUrl || "https://focus-garden-iota.vercel.app";
     const code = getCode();
     const language = getLanguage();
+    const headers = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${data.accessToken}`,
+    };
 
     console.log("[Focus Garden] Syncing:", problemInfo.name, "Language:", language);
 
     try {
       await fetch(`${appUrl}/api/neetcode-sync`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           problem_name: problemInfo.name,
           problem_number: problemInfo.number,
@@ -167,7 +171,7 @@
 
       await fetch(`${appUrl}/api/coding-notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           problem_name: problemInfo.name,
           problem_number: problemInfo.number,

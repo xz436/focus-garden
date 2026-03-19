@@ -107,18 +107,21 @@
     if (lastSynced === problemInfo.slug) return;
     lastSynced = problemInfo.slug;
 
-    const data = await chrome.storage.local.get(["appUrl", "supabaseUrl", "supabaseKey"]);
-    if (!data.supabaseUrl || !data.supabaseKey) return;
+    const data = await chrome.storage.local.get(["appUrl", "accessToken"]);
+    if (!data.accessToken) return;
 
     const appUrl = data.appUrl || "https://focus-garden-iota.vercel.app";
     const code = getCode();
     const language = getLanguage();
+    const headers = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${data.accessToken}`,
+    };
 
     try {
-      // Sync problem status
       await fetch(`${appUrl}/api/neetcode-sync`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           problem_name: problemInfo.name,
           problem_number: problemInfo.number,
@@ -126,10 +129,9 @@
         }),
       });
 
-      // Generate AI learning notes
       await fetch(`${appUrl}/api/coding-notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           problem_name: problemInfo.name,
           problem_number: problemInfo.number,

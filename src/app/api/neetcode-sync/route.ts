@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getAuthenticatedUser } from "@/lib/api-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 export async function OPTIONS() {
@@ -13,18 +13,16 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const { problem_name, problem_number, problem_slug } = await request.json();
+    const body = await request.json();
+    const { problem_name, problem_number } = body;
 
     if (!problem_name && !problem_number) {
       return NextResponse.json({ error: "Missing problem info" }, { status: 400, headers: corsHeaders });
     }
 
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser(request);
 
-    if (!user) {
+    if (!user || !supabase) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
@@ -65,7 +63,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       problem: problem_name,
-      message: `Problem "${problem_name}" synced (not in NeetCode 150 list)`,
+      message: `Problem "${problem_name}" synced (not in tracker list)`,
     }, { headers: corsHeaders });
   } catch (error) {
     console.error("NeetCode sync error:", error);
