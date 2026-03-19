@@ -67,6 +67,17 @@ export const DEFAULT_CATEGORIES: Category[] = [
     defaultMinutes: 25,
     weeklyTarget: 7,
   },
+  {
+    id: "interview",
+    label: "Interview Prep",
+    emoji: "🎯",
+    plant: "Bamboo",
+    color: "#0ea5e9",
+    colorClass: "text-sky-500",
+    bgClass: "bg-sky-500",
+    defaultMinutes: 25,
+    weeklyTarget: 10,
+  },
 ];
 
 // Plant/emoji presets for creating new categories

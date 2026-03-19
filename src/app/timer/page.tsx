@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Category } from "@/types";
 import { getPlantEmoji } from "@/lib/constants";
-import { addSession, getWeekCategorySessions, getWeekCategorySessionsForWeek, getSettings, getTodaySessions, checkAndUnlockAchievements, getCategories, getCategoryMap, getDailyPlanWithWeekly, getWeeklyPlan } from "@/lib/store";
+import { addSession, getWeekCategorySessions, getWeekCategorySessionsForWeek, getSettings, saveSettings, getTodaySessions, checkAndUnlockAchievements, getCategories, getCategoryMap, getDailyPlanWithWeekly, getWeeklyPlan } from "@/lib/store";
+import { PLANT_PRESETS } from "@/lib/constants";
 import { formatTime, getWeekStart, toLocalDateString, getToday } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -242,6 +243,11 @@ function TimerPageInner() {
   // Focus mode
   const [focusMode, setFocusMode] = useState(false);
   const [breathePhase, setBreathePhase] = useState<"inhale" | "hold" | "exhale">("inhale");
+
+  // Quick add category
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState("");
+  const [newCatPreset, setNewCatPreset] = useState(0);
 
   // "Already started" backdating
   const [showBackdate, setShowBackdate] = useState(false);
@@ -936,7 +942,98 @@ function TimerPageInner() {
               </span>
             </button>
           ))}
+          {categories.length < 8 && timerState === "idle" && (
+            <button
+              onClick={() => setShowAddCategory(true)}
+              className="flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-card-border p-3 transition-all hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-muted"
+            >
+              <span className="text-2xl text-muted">+</span>
+              <span className="text-xs text-muted">Add New</span>
+            </button>
+          )}
         </div>
+
+        {/* Quick Add Category Modal */}
+        {showAddCategory && (
+          <>
+            <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => setShowAddCategory(false)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+              <div className="w-full max-w-xs rounded-2xl bg-card border border-card-border shadow-xl p-5 space-y-4">
+                <h3 className="text-sm font-semibold text-center">Add Category</h3>
+                <input
+                  type="text"
+                  value={newCatLabel}
+                  onChange={(e) => setNewCatLabel(e.target.value)}
+                  placeholder="Category name..."
+                  className="w-full rounded-xl border border-card-border bg-gray-50 dark:bg-gray-800 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                  autoFocus
+                />
+                <div>
+                  <p className="text-xs text-muted mb-2">Pick a plant</p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {PLANT_PRESETS.slice(0, 10).map((preset, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setNewCatPreset(i)}
+                        className={`text-2xl p-1.5 rounded-lg transition-all ${
+                          newCatPreset === i
+                            ? "bg-gray-100 dark:bg-gray-700 scale-110 ring-2 ring-green-400"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                        }`}
+                      >
+                        {preset.emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => { setShowAddCategory(false); setNewCatLabel(""); }}
+                    className="flex-1"
+                    size="sm"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (!newCatLabel.trim()) return;
+                      const preset = PLANT_PRESETS[newCatPreset];
+                      const id = newCatLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+                      const settings = getSettings();
+                      if (settings.categories.some(c => c.id === id)) {
+                        showToast({ emoji: "!", title: "Category already exists", type: "info" });
+                        return;
+                      }
+                      const newCat: Category = {
+                        id, label: newCatLabel.trim(),
+                        emoji: preset.emoji, plant: preset.plant,
+                        color: preset.color, colorClass: preset.colorClass,
+                        bgClass: preset.bgClass, defaultMinutes: 25, weeklyTarget: 5,
+                      };
+                      saveSettings({
+                        ...settings,
+                        categories: [...settings.categories, newCat],
+                        timerDurations: { ...settings.timerDurations, [id]: 25 },
+                        weeklyTargets: { ...settings.weeklyTargets, [id]: 5 },
+                      });
+                      setCategories([...categories, newCat]);
+                      setCategoryMap({ ...categoryMap, [id]: newCat });
+                      setCategory(id);
+                      setShowAddCategory(false);
+                      setNewCatLabel("");
+                      showToast({ emoji: preset.emoji, title: `${newCatLabel.trim()} added!`, type: "success" });
+                    }}
+                    className="flex-1"
+                    size="sm"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Completion animation */}
         {showComplete && (
