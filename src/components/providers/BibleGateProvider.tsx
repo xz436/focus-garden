@@ -14,6 +14,7 @@ const EXEMPT_PATHS = [
   "/onboarding",
   "/evening-reflection",
   "/journal",
+  "/coding-notes",
   "/",
   "/share",
 ];
