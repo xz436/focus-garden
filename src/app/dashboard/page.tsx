@@ -116,7 +116,7 @@ export default function DashboardPage() {
       category: catId,
       duration_minutes: quickMinutes,
       notes: quickNotes || null,
-      started_at: new Date(Date.now() - quickMinutes * 60 * 1000).toISOString(),
+      started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
     });
     setQuickNotes("");
