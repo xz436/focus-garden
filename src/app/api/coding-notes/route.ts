@@ -1,6 +1,16 @@
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -9,7 +19,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
     const {
@@ -88,7 +98,7 @@ Keep it concise and actionable — these are quick review notes.`;
       console.error("Claude API error:", err);
       return NextResponse.json(
         { error: "Failed to generate notes" },
-        { status: 500 }
+        { status: 500, headers: corsHeaders }
       );
     }
 
@@ -119,12 +129,12 @@ Keep it concise and actionable — these are quick review notes.`;
       complexity,
     });
 
-    return NextResponse.json({ success: true, notes: aiNotes });
+    return NextResponse.json({ success: true, notes: aiNotes }, { headers: corsHeaders });
   } catch (error) {
     console.error("Coding notes error:", error);
     return NextResponse.json(
       { error: "Failed to generate notes" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
