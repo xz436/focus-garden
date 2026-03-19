@@ -75,9 +75,11 @@ export function addSession(session: Omit<Session, "id" | "user_id" | "created_at
 
 export function getTodaySessions(): Session[] {
   const today = getToday();
-  return getSessions().filter(
-    (s) => s.completed_at && toLocalDateString(new Date(s.completed_at)) === today
-  );
+  return getSessions()
+    .filter(
+      (s) => s.completed_at && toLocalDateString(new Date(s.completed_at)) === today
+    )
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
 }
 
 export function getWeekSessions(): Session[] {

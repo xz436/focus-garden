@@ -252,6 +252,8 @@ function TimerPageInner() {
   const completingRef = useRef(false);
   const completeSessionRef = useRef<() => void>(() => {});
   const originalTitleRef = useRef<string>("");
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
 
   // Persist active timer to localStorage so it survives page navigation
   const saveActiveTimer = useCallback((state: TimerState, cat: string, total: number, left: number, started: string) => {
@@ -466,7 +468,7 @@ function TimerPageInner() {
     addSession({
       category,
       duration_minutes: Math.round(totalTime / 60),
-      notes: notes || null,
+      notes: notesRef.current || null,
       started_at: startTimeRef.current,
       completed_at: new Date().toISOString(),
     });
@@ -517,7 +519,7 @@ function TimerPageInner() {
         type: "info",
       });
     }, 2000);
-  }, [category, notes, sessionCount, totalTime, saveActiveTimer, loadTodayTasks]);
+  }, [category, sessionCount, totalTime, saveActiveTimer, loadTodayTasks]);
 
   const startTimer = useCallback(() => {
     const minutes = getTimerDuration(category);
