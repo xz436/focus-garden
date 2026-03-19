@@ -755,7 +755,7 @@ export function checkAndUnlockAchievements(): Achievement[] {
 }
 
 // Edit a session
-export function editSession(id: string, updates: Partial<Pick<Session, "duration_minutes" | "notes" | "category">>): Session | null {
+export function editSession(id: string, updates: Partial<Pick<Session, "duration_minutes" | "notes" | "category" | "started_at">>): Session | null {
   const sessions = getSessions();
   const idx = sessions.findIndex((s) => s.id === id);
   if (idx === -1) return null;

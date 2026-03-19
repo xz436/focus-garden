@@ -20,6 +20,10 @@ export default function SessionEditModal({
   const [category, setCategory] = useState(session.category);
   const [duration, setDuration] = useState(session.duration_minutes);
   const [notes, setNotes] = useState(session.notes || "");
+  const [startTime, setStartTime] = useState(() => {
+    const d = new Date(session.started_at);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  });
   const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
@@ -27,10 +31,14 @@ export default function SessionEditModal({
   }, []);
 
   const handleSave = () => {
+    const [h, m] = startTime.split(":").map(Number);
+    const newStart = new Date(session.started_at);
+    newStart.setHours(h, m, 0, 0);
     editSession(session.id, {
       category,
       duration_minutes: duration,
       notes: notes || null,
+      started_at: newStart.toISOString(),
     });
     onSave();
     onClose();
@@ -108,6 +116,19 @@ export default function SessionEditModal({
               className="w-16 rounded-lg border border-card-border bg-gray-50 dark:bg-gray-800 px-2 py-1.5 text-sm text-center focus:outline-none focus:border-gray-400"
             />
           </div>
+        </div>
+
+        {/* Start Time */}
+        <div className="mb-4">
+          <label className="text-xs font-medium text-muted mb-2 block">
+            Start Time
+          </label>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="w-full rounded-lg border border-card-border bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm focus:outline-none focus:border-gray-400"
+          />
         </div>
 
         {/* Notes */}
