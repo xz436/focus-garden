@@ -159,7 +159,7 @@
     console.log("[Focus Garden] Syncing:", problemInfo.name, "Language:", language);
 
     try {
-      await fetch(`${appUrl}/api/neetcode-sync`, {
+      const syncRes = await fetch(`${appUrl}/api/neetcode-sync`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -168,8 +168,11 @@
           problem_slug: problemInfo.slug,
         }),
       });
+      const syncData = await syncRes.json();
+      console.log("[Focus Garden] Sync response:", syncData);
 
-      await fetch(`${appUrl}/api/coding-notes`, {
+      // Fire coding notes in background (don't block toast)
+      fetch(`${appUrl}/api/coding-notes`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -181,7 +184,7 @@
           errors_log: errorsLog,
           language,
         }),
-      });
+      }).then(r => r.json()).then(d => console.log("[Focus Garden] Notes response:", d)).catch(e => console.error("[Focus Garden] Notes error:", e));
 
       const logs = (await chrome.storage.local.get("recentLogs")).recentLogs || [];
       logs.push({
