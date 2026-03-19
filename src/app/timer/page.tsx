@@ -369,8 +369,20 @@ function TimerPageInner() {
             setTimeLeft(remaining);
             setTimerState(t.state);
             startTimeRef.current = t.startedAt;
+          } else if (t.state === "running") {
+            // Timer expired while away — auto-complete the session
+            localStorage.removeItem("fg_active_timer");
+            const completed = new Date(t.savedAt + t.timeLeft * 1000);
+            addSession({
+              category: t.category,
+              duration_minutes: Math.round(t.totalTime / 60),
+              notes: null,
+              started_at: t.startedAt,
+              completed_at: completed.toISOString(),
+            });
+            showToast({ emoji: "🌱", title: "Session auto-completed!", description: "Timer finished while you were away.", type: "success" });
           } else {
-            // Timer expired while away — clear it
+            // Break expired while away — just clear
             localStorage.removeItem("fg_active_timer");
           }
         } else if (t.state === "paused") {
