@@ -61,6 +61,7 @@ export default function AuthProvider({
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
+    sessionStorage.removeItem("fg_synced_this_session");
     window.location.href = "/login";
   }, []);
 

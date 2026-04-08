@@ -99,6 +99,10 @@ export default function PlanPage() {
     );
   }
 
+  // Only show these categories in the plan
+  const PLAN_CATEGORY_IDS = ["spiritual", "interview", "coding"];
+  const planCategories = categories.filter((c) => PLAN_CATEGORY_IDS.includes(c.id));
+
   const totalPlannedSessions = Object.values(categoryGoals).reduce((a, b) => a + b, 0);
 
   const selectedDateObj = new Date(selectedDate + "T00:00:00");
@@ -199,7 +203,7 @@ export default function PlanPage() {
           </div>
 
           <div className="space-y-3 mt-3">
-            {categories.map((cat) => (
+            {planCategories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3">
                 <span className="text-lg w-7">{cat.emoji}</span>
                 <span className="text-sm flex-1">{cat.label}</span>
@@ -242,7 +246,7 @@ export default function PlanPage() {
             <div className="mt-4 pt-3 border-t border-card-border">
               <div className="text-xs text-muted mb-2">Visual plan</div>
               <div className="flex flex-wrap gap-1">
-                {categories.flatMap((cat) =>
+                {planCategories.flatMap((cat) =>
                   Array.from({ length: categoryGoals[cat.id] || 0 }).map((_, i) => (
                     <div
                       key={`${cat.id}-${i}`}

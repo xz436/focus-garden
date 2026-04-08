@@ -164,6 +164,12 @@ export default function DataProvider({
 
       setLastSyncAt(new Date().toISOString());
       setSynced(true);
+
+      // If we pulled data from remote, reload so pages re-read localStorage
+      if (hasRemoteData && !sessionStorage.getItem("fg_synced_this_session")) {
+        sessionStorage.setItem("fg_synced_this_session", "1");
+        window.location.reload();
+      }
     } catch (err) {
       console.error("DataProvider: Sync failed", err);
     } finally {

@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation";
 const MAIN_NAV = [
   { href: "/dashboard", label: "Home", icon: "🏠" },
   { href: "/timer", label: "Timer", icon: "⏱️" },
-  { href: "/blind75", label: "Coding", icon: "💻" },
   { href: "/garden", label: "Garden", icon: "🌱" },
 ];
 
